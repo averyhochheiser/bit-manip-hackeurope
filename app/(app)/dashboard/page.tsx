@@ -12,21 +12,6 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { ensureBillingProfile } from "@/lib/billing/provision";
 
-const GITHUB_ACTION_YAML = `# .github/workflows/carbon-gate.yml
-name: Carbon Gate
-on: [pull_request]
-jobs:
-  carbon-gate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run Carbon Gate
-        uses: carbon-gate/action@v1
-        with:
-          api_key: \${{ secrets.CARBON_GATE_API_KEY }}
-          gpu: H100
-          estimated_hours: 2`;
-
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -128,62 +113,34 @@ export default async function DashboardPage() {
                 </div>
                 <div>
                   <h2 className="font-display text-lg font-semibold text-floral">
-                    Connect your first repo
+                    Get started with Carbon Gate
                   </h2>
                   <p className="text-sm text-floral/45">
-                    Add the Carbon Gate Action to a repository to start tracking emissions on every PR.
+                    Sign in with GitHub to see your repos, then install Carbon Gate on any repo with one click.
                   </p>
                 </div>
               </div>
 
-              {/* Steps */}
-              <div className="grid gap-4 md:grid-cols-3">
-                {[
-                  {
-                    step: "1",
-                    title: "Add the GitHub Action",
-                    desc: "Copy the YAML below into .github/workflows/carbon-gate.yml in your repo.",
-                    done: false,
-                  },
-                  {
-                    step: "2",
-                    title: "Add your API key",
-                    desc: "Set CARBON_GATE_API_KEY as a GitHub secret. Find your key in Settings.",
-                    done: false,
-                  },
-                  {
-                    step: "3",
-                    title: "Open a pull request",
-                    desc: "Every PR will now get a carbon cost estimate. Results appear here automatically.",
-                    done: false,
-                  },
-                ].map((s) => (
-                  <div key={s.step} className="panel-muted rounded-xl p-5">
-                    <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-full border border-crusoe/30 bg-crusoe/10 text-xs font-bold text-crusoe">
-                      {s.step}
-                    </div>
-                    <p className="text-sm font-semibold text-floral">{s.title}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-floral/45">{s.desc}</p>
+              {/* Simple 2-step guide */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="panel-muted rounded-xl p-5">
+                  <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-full border border-sage/30 bg-sage/10 text-xs font-bold text-sage">
+                    1
                   </div>
-                ))}
-              </div>
-
-              {/* YAML snippet */}
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-floral/40">
-                    GitHub Action YAML
+                  <p className="text-sm font-semibold text-floral">Install on a repo</p>
+                  <p className="mt-1 text-xs leading-relaxed text-floral/45">
+                    Click &quot;Install Carbon Gate&quot; on any repo card above. We&apos;ll add the workflow file automatically.
                   </p>
-                  <a
-                    href="/settings"
-                    className="text-xs text-crusoe/70 transition hover:text-crusoe"
-                  >
-                    Get API key in Settings →
-                  </a>
                 </div>
-                <pre className="overflow-x-auto rounded-xl border border-floral/[0.07] bg-black/30 p-4 font-monoData text-xs leading-relaxed text-floral/70">
-                  {GITHUB_ACTION_YAML}
-                </pre>
+                <div className="panel-muted rounded-xl p-5">
+                  <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-full border border-sage/30 bg-sage/10 text-xs font-bold text-sage">
+                    2
+                  </div>
+                  <p className="text-sm font-semibold text-floral">Open a pull request</p>
+                  <p className="mt-1 text-xs leading-relaxed text-floral/45">
+                    Every PR will now get a carbon cost estimate posted as a comment. Results appear here automatically.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

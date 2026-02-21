@@ -156,6 +156,7 @@ export async function getUserDashboardData(
       budgetKg: round1(repoBudgets.get(gh.fullName) ?? (orgBudgetKg / activeRepoCount)),
       topContributor: gh.relation === "owned" ? "you (owner)" : "you (contributor)",
       totalGatesRun: gate?.count ?? 0,
+      hasGateData: (gate?.count ?? 0) > 0,
     };
   });
 
@@ -168,6 +169,7 @@ export async function getUserDashboardData(
         budgetKg: round1(repoBudgets.get(repoName) ?? (orgBudgetKg / activeRepoCount)),
         topContributor: "gate data",
         totalGatesRun: stats.count,
+        hasGateData: true,
       });
     }
   }

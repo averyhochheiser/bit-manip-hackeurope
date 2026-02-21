@@ -4,6 +4,7 @@ import type { RepoReport } from "@/lib/dashboard/types";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ChevronRight, ExternalLink, GitBranch } from "lucide-react";
+import { InstallCarbonGate } from "./install-carbon-gate";
 
 type RepoBreakdownProps = {
   reports: RepoReport[];
@@ -97,15 +98,24 @@ export function RepoBreakdown({ reports }: RepoBreakdownProps) {
               </div>
             </div>
 
-            <div className="mt-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="h-5 w-5 rounded-full bg-white/[0.08]" />
-                <span className="text-[11px] text-floral/30">Top: {report.topContributor}</span>
+            {/* Install button for repos without gate data */}
+            {report.hasGateData === false && (
+              <div className="mt-4 border-t border-white/[0.03] pt-4">
+                <InstallCarbonGate repo={report.repo} />
               </div>
-              <button className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-floral/40 transition hover:text-floral/80">
-                View Reports <ChevronRight size={12} />
-              </button>
-            </div>
+            )}
+
+            {report.hasGateData !== false && (
+              <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-5 w-5 rounded-full bg-white/[0.08]" />
+                  <span className="text-[11px] text-floral/30">Top: {report.topContributor}</span>
+                </div>
+                <button className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-floral/40 transition hover:text-floral/80">
+                  View Reports <ChevronRight size={12} />
+                </button>
+              </div>
+            )}
           </motion.div>
         );
       })}
