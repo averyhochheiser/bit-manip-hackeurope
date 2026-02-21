@@ -1,42 +1,61 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
-  color-scheme: dark;
+@theme {
+  --color-crusoe: #98d2eb;
+  --color-sage: #69995d;
+  --color-mauve: #533745;
+  --color-floral: #fff8f0;
+  --color-gate-bg: #23282e;
+  --color-gate-panel: #2a3038;
+
+  --font-display: var(--font-display);
+  --font-serif: var(--font-serif);
+  --font-mono-data: var(--font-mono);
 }
 
-html,
-body {
-  background: #23282e;
-  color: #fff8f0;
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    background-color: var(--color-gate-bg);
+    color: var(--color-floral);
+    min-height: 100vh;
+  }
 }
 
-body {
-  min-height: 100vh;
-}
-
-.panel {
+@utility panel {
   border-radius: 1rem;
   border: 1px solid rgba(255, 248, 240, 0.15);
   background: rgba(255, 248, 240, 0.03);
-  box-shadow: inset 0 0.5px 0 0 rgba(255, 248, 240, 0.1), 0 24px 60px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 0.5px 0 0 rgba(255, 248, 240, 0.1),
+    0 24px 60px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
 }
 
-.panel-muted {
+@utility panel-muted {
   border-radius: 0.75rem;
   border: 1px solid rgba(255, 248, 240, 0.1);
   background: rgba(255, 248, 240, 0.02);
   box-shadow: inset 0 0.5px 0 0 rgba(255, 248, 240, 0.08);
 }
 
-.hero-glow {
+@utility hero-glow {
   background: radial-gradient(circle at center, rgba(152, 210, 235, 0.14), transparent 62%);
 }
 
-.card-floral {
+@utility card-floral {
   background: #fff8f0;
   color: #23282e;
   border-radius: 1.25rem;
   box-shadow: 0 32px 80px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+@utility bg-noise {
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(152, 210, 235, 0.06), transparent 35%),
+    radial-gradient(circle at 80% 0%, rgba(105, 153, 93, 0.04), transparent 25%);
 }

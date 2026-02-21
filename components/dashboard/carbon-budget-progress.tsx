@@ -13,14 +13,8 @@ type ProgressState = "healthy" | "warning" | "reroute";
 
 const FILL_CLASS: Record<ProgressState, string> = {
   healthy: "from-sage to-sage/70",
-  warning: "from-sage/60 via-crusoe/50 to-crusoe",
-  reroute: "from-crusoe to-crusoe/80"
-};
-
-const SHIMMER_CLASS: Record<ProgressState, string> = {
-  healthy: "bg-sage/10",
-  warning: "bg-crusoe/15",
-  reroute: "bg-crusoe/20"
+  warning: "from-sage via-crusoe/80 to-crusoe",
+  reroute: "from-crusoe to-crusoe/60"
 };
 
 export function CarbonBudgetProgressBar({
@@ -33,70 +27,70 @@ export function CarbonBudgetProgressBar({
   const clampedPct = Math.max(0, Math.min(100, pct));
   const state: ProgressState = pct < 70 ? "healthy" : pct < 100 ? "warning" : "reroute";
   const overageKg = Math.max(0, usedKg - safeBudget);
-  const glowClass =
-    state === "healthy"
-      ? ""
-      : state === "warning"
-        ? "shadow-[0_0_38px_rgba(152,210,235,0.2)]"
-        : "shadow-[0_0_42px_rgba(152,210,235,0.35)]";
 
   return (
-    <section className="panel relative overflow-hidden p-6">
-      <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
+    <section className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-8 backdrop-blur-md">
+      <div className="pointer-events-none absolute inset-0 bg-noise opacity-[0.15]" />
+
       <div className="relative">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-floral/60">Carbon Budget</p>
-            <h3 className="mt-2 text-2xl font-semibold text-floral">Budget Utilization</h3>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-floral/30">Monthly Policy</p>
+            <h3 className="mt-1 text-2xl font-bold text-floral">Carbon Budget</h3>
           </div>
-          <p className="font-monoData text-lg text-floral/85">{pct.toFixed(1)}%</p>
+          <div className="text-right">
+            <span className="font-monoData text-3xl font-bold text-floral">{pct.toFixed(0)}</span>
+            <span className="ml-1 text-xs font-bold text-floral/30 uppercase tracking-tighter">%</span>
+          </div>
         </div>
 
-        <div className="mt-6">
-          <div className="h-3 overflow-hidden rounded-full bg-floral/10 ring-1 ring-floral/15">
+        <div className="mt-8">
+          <div className="relative h-4 overflow-hidden rounded-full bg-white/[0.05] shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)]">
             <motion.div
               className={cn(
-                "relative h-full rounded-full bg-gradient-to-r transition-shadow duration-300",
-                FILL_CLASS[state],
-                glowClass
+                "relative h-full rounded-full bg-gradient-to-r",
+                FILL_CLASS[state]
               )}
               initial={{ width: 0 }}
               animate={{ width: `${clampedPct}%` }}
-              transition={{ type: "spring", stiffness: 120, damping: 22 }}
+              transition={{ type: "spring", stiffness: 100, damping: 20 }}
             >
-              {state !== "healthy" ? (
-                <motion.span
-                  className={cn(
-                    "absolute inset-y-0 w-1/3 rounded-full blur-sm",
-                    SHIMMER_CLASS[state]
-                  )}
-                  initial={{ x: "-30%" }}
-                  animate={{ x: "300%" }}
-                  transition={{ duration: 2.6, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
-                />
-              ) : null}
+              {/* Internal glow for the progress head */}
+              <div className="absolute right-0 top-0 h-full w-4 bg-white/20 blur-sm" />
             </motion.div>
           </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-floral/70">
-            <p className="font-monoData">
-              {usedKg.toFixed(2)}kg / {safeBudget.toFixed(2)}kg
-            </p>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 font-monoData text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-floral/40">Used:</span>
+              <span className="font-bold text-floral">{usedKg.toFixed(1)} kg</span>
+              <span className="text-floral/10">|</span>
+              <span className="text-floral/40">Limit:</span>
+              <span className="font-bold text-floral">{safeBudget.toFixed(0)} kg</span>
+            </div>
+
             {overageKg > 0 ? (
-              <span className="rounded-md border border-crusoe/40 bg-crusoe/15 px-2.5 py-1 text-xs font-medium text-crusoe">
-                Reroute active: +{overageKg.toFixed(2)}kg over
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-crusoe/30 bg-crusoe/10 px-3 py-1 font-bold text-crusoe uppercase tracking-wider text-[10px]">
+                <span className="h-1 w-1 rounded-full bg-crusoe animate-pulse" />
+                Reroute active: +{overageKg.toFixed(1)}kg Overage
               </span>
             ) : (
-              <span className="rounded-md border border-floral/15 bg-floral/5 px-2.5 py-1 text-xs text-floral/70">
-                On policy budget
+              <span className="inline-flex items-center rounded-full border border-sage/20 bg-sage/10 px-3 py-1 font-bold text-sage uppercase tracking-wider text-[10px]">
+                On Policy
               </span>
             )}
           </div>
         </div>
 
         {projectedKg ? (
-          <p className="mt-4 text-xs text-floral/55">
-            Projected period close: <span className="font-monoData text-crusoe">{projectedKg.toFixed(2)}kg</span>
-          </p>
+          <div className="mt-6 flex items-center gap-2 border-t border-white/[0.03] pt-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-floral/30">
+              Projected Burn Rate:
+            </p>
+            <span className="font-monoData text-xs font-bold text-crusoe">
+              {projectedKg.toFixed(1)} kgCO₂e at month end
+            </span>
+          </div>
         ) : null}
       </div>
     </section>

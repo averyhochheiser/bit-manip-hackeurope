@@ -44,9 +44,18 @@ export interface GateEventDbRow {
   created_at: string;
 }
 
+export interface RepoReport {
+  repo: string;
+  usedKg: number;
+  budgetKg: number;
+  topContributor: string;
+  totalGatesRun: number;
+}
+
 export interface DashboardReadModel {
   kpis: KpiItem[];
   budget: BudgetModel;
   billing: BillingModel;
   gateEvents: GateEventRow[];
+  repoReports: RepoReport[];
 }
