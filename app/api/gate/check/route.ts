@@ -152,6 +152,7 @@ export async function POST(request: Request) {
     status:               result.gate.legacyStatus,
     crusoe_available:     crusoe.available,
     crusoe_instance:      crusoe.recommendedModel,
+    ...(pr_author ? { contributor: pr_author } : {}),
   });
 
   // ── 7b. Report metered usage to Stripe ─────────────────────────────────

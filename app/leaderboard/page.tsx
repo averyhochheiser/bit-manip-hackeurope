@@ -62,6 +62,33 @@ export default async function LeaderboardPage() {
           </div>
         ) : (
           <div className="space-y-8">
+            {/* Individual contributor leaderboard — primary */}
+            <section>
+              <div className="mb-4 flex items-center gap-2">
+                <User size={16} className="text-sage" />
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-floral/60">
+                  By Contributor
+                  <span className="ml-2 rounded-full bg-sage/10 px-2 py-0.5 text-[10px] font-normal text-sage">
+                    individual developers
+                  </span>
+                </h2>
+              </div>
+              <p className="mb-3 text-xs text-floral/35">
+                Individual developers ranked by gate checks across all repos and orgs.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {contributorBoard.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-floral/30 sm:col-span-2 lg:col-span-3">
+                    No contributor data yet.
+                  </p>
+                ) : (
+                  contributorBoard.map((entry, i) => (
+                    <OrgRow key={entry.name} rank={i + 1} entry={entry} showRepos />
+                  ))
+                )}
+              </div>
+            </section>
+
             <div className="grid gap-8 lg:grid-cols-2">
               {/* Org leaderboard */}
               <section>
@@ -105,33 +132,6 @@ export default async function LeaderboardPage() {
                 </div>
               </section>
             </div>
-
-            {/* Individual contributor leaderboard */}
-            <section>
-              <div className="mb-4 flex items-center gap-2">
-                <User size={16} className="text-floral/50" />
-                <h2 className="text-sm font-semibold uppercase tracking-widest text-floral/60">
-                  By Contributor
-                  <span className="ml-2 rounded-full bg-floral/[0.06] px-2 py-0.5 text-[10px] font-normal text-floral/40">
-                    individual developers
-                  </span>
-                </h2>
-              </div>
-              <p className="mb-3 text-xs text-floral/35">
-                Individual developers ranked by gate checks across all repos and orgs.
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {contributorBoard.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-floral/30 sm:col-span-2 lg:col-span-3">
-                    No contributor data yet — requires gate_check.py v2 with pr_author support.
-                  </p>
-                ) : (
-                  contributorBoard.map((entry, i) => (
-                    <OrgRow key={entry.name} rank={i + 1} entry={entry} showRepos />
-                  ))
-                )}
-              </div>
-            </section>
           </div>
         )}
 
