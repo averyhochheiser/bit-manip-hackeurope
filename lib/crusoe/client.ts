@@ -30,14 +30,40 @@ export interface CrusoeAvailability {
 
 /**
  * Preference map: GPU type → favourite model families (ordered by preference).
- * H100-optimised jobs get the big Llama; lighter GPUs get smaller models.
+ * Uses real model IDs from Crusoe's live /models endpoint (verified Feb 2026).
+ *
+ * Available models:
+ *   Qwen/Qwen3-235B-A22B-Instruct-2507   (235B params)
+ *   deepseek-ai/DeepSeek-R1-0528          (reasoning)
+ *   deepseek-ai/DeepSeek-V3-0324          (general)
+ *   google/gemma-3-12b-it                 (lightweight)
+ *   meta-llama/Llama-3.3-70B-Instruct     (70B, versatile)
+ *   moonshotai/Kimi-K2-Thinking           (reasoning)
+ *   openai/gpt-oss-120b                   (120B)
  */
 const GPU_MODEL_PREFERENCES: Record<string, string[]> = {
-  H100: ["llama-3.3-70b", "deepseek", "llama-3.1-70b"],
-  A100: ["llama-3.1-8b", "llama-3.3-70b"],
-  V100: ["llama-3.2-3b", "llama-3.1-8b"],
-  A10:  ["llama-3.2-1b", "llama-3.2-3b"],
-  A10G: ["llama-3.2-1b", "llama-3.2-3b"],
+  H100: [
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "deepseek-ai/DeepSeek-R1-0528",
+    "openai/gpt-oss-120b",
+  ],
+  A100: [
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "deepseek-ai/DeepSeek-V3-0324",
+    "openai/gpt-oss-120b",
+  ],
+  V100: [
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "google/gemma-3-12b-it",
+  ],
+  A10: [
+    "google/gemma-3-12b-it",
+    "meta-llama/Llama-3.3-70B-Instruct",
+  ],
+  A10G: [
+    "google/gemma-3-12b-it",
+    "meta-llama/Llama-3.3-70B-Instruct",
+  ],
 };
 
 export async function getCrusoeAvailability(gpuType: string): Promise<CrusoeAvailability> {
@@ -59,15 +85,18 @@ export async function getCrusoeAvailability(gpuType: string): Promise<CrusoeAvai
     const models: CrusoeModel[] = body.data ?? [];
 
     const preferences = GPU_MODEL_PREFERENCES[gpuType] ?? GPU_MODEL_PREFERENCES.A100;
-    const recommended =
-      models.find((m) => preferences.some((pref) => m.id.toLowerCase().includes(pref))) ??
-      models[0] ??
+    const modelIds = new Set(models.map((m) => m.id));
+
+    // Exact match first, then fallback to first available
+    const recommendedId =
+      preferences.find((id) => modelIds.has(id)) ??
+      models[0]?.id ??
       null;
 
     return {
       available: models.length > 0,
       models,
-      recommendedModel: recommended?.id ?? null,
+      recommendedModel: recommendedId,
     };
   } catch (err) {
     console.error("[crusoe] availability check failed, using fallback:", err);

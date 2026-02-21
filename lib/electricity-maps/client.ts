@@ -59,7 +59,7 @@ export async function getCarbonIntensity(region: string): Promise<number> {
   if (apiKey && zone) {
     try {
       const res = await fetch(
-        `https://api.electricitymap.org/v3/carbon-intensity/latest?zone=${zone}`,
+        `https://api.electricitymaps.com/v3/carbon-intensity/latest?zone=${zone}`,
         {
           headers: { "auth-token": apiKey },
           next: { revalidate: 300 }, // cache 5 min
