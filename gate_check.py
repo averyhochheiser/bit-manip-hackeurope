@@ -131,6 +131,80 @@ def get_pr_file_contents() -> Optional[dict]:
 CRUSOE_API_BASE = "https://hackeurope.crusoecloud.com/v1"
 CRUSOE_MODEL = "NVFP4/Qwen3-235B-A22B-Instruct-2507-FP4"
 
+# ── Local carbon calculator (mirrors lib/carbon/calculator.ts) ──────────────
+
+GPU_TDP_W = {
+    "H100": 700, "A100": 400, "V100": 300,
+    "A10": 150, "A10G": 150, "T4": 70, "L40": 300,
+}
+
+GPU_EMBODIED_KG = {
+    "H100": 250, "A100": 150, "V100": 120,
+    "A10": 80, "A10G": 80, "T4": 50, "L40": 120,
+}
+
+GPU_LIFETIME_H = 5 * 365 * 24 * 0.5  # ~21,900 h at 50% utilisation
+
+CRUSOE_INTENSITY_G_PER_KWH = 5  # Crusoe geothermal/solar grid
+
+# Region -> average grid carbon intensity (gCO2/kWh) - 2024 estimates
+REGION_CARBON_INTENSITY = {
+    "us-east-1": 380,    # Virginia
+    "us-east-2": 440,    # Ohio
+    "us-west-1": 210,    # N. California
+    "us-west-2": 280,    # Oregon
+    "eu-west-1": 300,    # Ireland
+    "eu-west-2": 230,    # London
+    "eu-west-3": 55,     # Paris (nuclear)
+    "eu-central-1": 340, # Frankfurt
+    "eu-north-1": 25,    # Stockholm (hydro)
+    "ap-northeast-1": 480, # Tokyo
+    "ap-south-1": 640,   # Mumbai
+}
+
+
+def compute_pue(ambient_temp_c: float = 20.0) -> float:
+    """Thermodynamic PUE model - mirrors lib/carbon/calculator.ts"""
+    base = 1.10
+    temp_coeff = 0.005  # +0.5% per C above 15C baseline
+    return min(2.0, base + max(0, (ambient_temp_c - 15) * temp_coeff))
+
+
+def calculate_emissions_local(gpu: str, hours: float, region: str) -> dict:
+    """
+    Calculate carbon emissions locally using the same physics as the API.
+    Used when the API is unreachable (no org key, 401, network error, etc.).
+    Returns a dict matching the API response shape.
+    """
+    tdp_w = GPU_TDP_W.get(gpu, GPU_TDP_W.get("A100", 400))
+    embodied_kg = GPU_EMBODIED_KG.get(gpu, GPU_EMBODIED_KG.get("A100", 150))
+    carbon_intensity = REGION_CARBON_INTENSITY.get(region, 380)
+
+    pue = compute_pue(20.0)  # assume 20C ambient
+    energy_kwh = (tdp_w / 1000) * hours * pue
+
+    operational_kg = (energy_kwh * carbon_intensity) / 1000
+    embodied_share_kg = (embodied_kg / GPU_LIFETIME_H) * hours
+    emissions_kg = round(operational_kg + embodied_share_kg, 2)
+
+    crusoe_operational_kg = (energy_kwh * CRUSOE_INTENSITY_G_PER_KWH) / 1000
+    crusoe_emissions_kg = round(crusoe_operational_kg + embodied_share_kg, 2)
+
+    return {
+        "emissions_kg": emissions_kg,
+        "crusoe_emissions_kg": crusoe_emissions_kg,
+        "budget_remaining_kg": 50.0,  # default monthly budget
+        "status": "pass",             # will be overridden by local thresholds
+        "optimal_window": "Schedule during off-peak hours (early morning local time) for lower grid intensity",
+        "crusoe_available": True,
+        "crusoe_instance": f"{gpu.lower()}-1x",
+        "carbon_intensity": carbon_intensity,
+        "pue_used": round(pue, 2),
+        "energy_kwh": round(energy_kwh, 2),
+    }
+
+
+
 
 def get_static_suggestions(config: dict) -> str:
     """
@@ -777,60 +851,64 @@ def check_crusoe_reroute_command(config: dict) -> Optional[Dict[str, Any]]:
 
 
 def call_gate_api(config):
-    """Call the Carbon Gate API to check emissions"""
-    api_endpoint = os.environ.get("API_ENDPOINT", "https://carbon-gate.vercel.app")
-    org_api_key = os.environ.get("ORG_API_KEY")
+    """Call the Carbon Gate API to check emissions. Falls back to local calculation on failure."""
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app")
+    org_api_key = os.environ.get("ORG_API_KEY", "").strip()
     repo = os.environ.get("GITHUB_REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
+
+    gpu = config.get("gpu", "A100")
+    hours = config.get("estimated_hours", 1.0)
+    region = config.get("region", "us-east-1")
 
     if not pr_number:
         output("Not a pull request event, skipping Carbon Gate check", "info")
         sys.exit(0)
 
-    payload = {
-        "repo": repo,
-        "pr_number": int(pr_number),
-        "gpu": config.get("gpu", "A100"),
-        "estimated_hours": config.get("estimated_hours", 1.0),
-        "region": config.get("region", "us-east-1"),
-        "api_key": org_api_key,
-    }
-
     output(
         f"Running Carbon Gate check for PR #{pr_number}",
         "info",
-        {
-            "gpu": payload["gpu"],
-            "estimated_hours": payload["estimated_hours"],
-            "region": payload["region"],
-        },
+        {"gpu": gpu, "estimated_hours": hours, "region": region},
     )
 
-    try:
-        response = requests.post(
-            f"{api_endpoint}/api/gate/check",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=30,
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        output(f"API call failed: {e}", "error")
-        # For demo purposes, return mock data if API isn't ready yet
-        output("Using mock data for development", "warn")
-        return {
-            "emissions_kg": 3.2,
-            "crusoe_emissions_kg": 0.38,
-            "budget_remaining_kg": 12.4,
-            "status": "warn",
-            "overage_kg": 0,
-            "optimal_window": "wait 3 hours, save 34%",
-            "crusoe_available": True,
-            "crusoe_instance": "h100-sxm-80gb-1x",
-            "carbon_intensity": 420,
-            "pue_used": 1.15,
+    # Try the hosted API first (requires a valid org API key)
+    if org_api_key:
+        payload = {
+            "repo": repo,
+            "pr_number": int(pr_number),
+            "gpu": gpu,
+            "estimated_hours": hours,
+            "region": region,
+            "api_key": org_api_key,
         }
+        try:
+            response = requests.post(
+                f"{api_endpoint}/api/gate/check",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            output("Emissions calculated via Carbon Gate API", "success")
+            return data
+        except requests.exceptions.RequestException as e:
+            status_code = getattr(getattr(e, 'response', None), 'status_code', None)
+            if status_code == 401:
+                output("API authentication failed \u2014 check your CARBON_GATE_ORG_KEY secret", "warn")
+            else:
+                output(f"API call failed ({e}), calculating emissions locally", "warn")
+    else:
+        output("No ORG_API_KEY set \u2014 calculating emissions locally", "info")
+
+    # Local fallback: compute real emissions using the same physics as the API
+    result = calculate_emissions_local(gpu, hours, region)
+    output(
+        f"Local calculation: {result['emissions_kg']:.2f} kgCO\u2082eq "
+        f"({gpu}, {hours}h, {region} @ {result['carbon_intensity']} gCO\u2082/kWh)",
+        "info",
+    )
+    return result
 
 
 def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: Optional[str] = None, patch_applied: bool = False, suggestions_ai_powered: bool = True):
@@ -847,22 +925,33 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
     threshold_kg = config.get("threshold_kg_co2", 2.0)
     warn_kg = config.get("warn_kg_co2", 1.0)
 
-    # Determine status with educational messaging
+    # Status emoji and header
     if status == "block":
+        status_emoji = "🔴"   # red circle
+        status_label = "BLOCKED"
         status_text = f"**Exceeds carbon threshold** ({threshold_kg} kg)"
         status_message = (
-            f"**Energy Impact Alert** — This training job will consume significant energy resources. "
-            f"At {emissions:.2f} kgCO₂eq, it exceeds your organization's carbon threshold."
+            f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which exceeds your "
+            f"organization's carbon threshold of {threshold_kg} kg. The PR merge is blocked until "
+            f"emissions are reduced or an override is approved."
         )
     elif status == "warn":
-        status_text = f"**High emissions warning** ({warn_kg} kg)"
+        status_emoji = "🟡"   # yellow circle
+        status_label = "WARNING"
+        status_text = f"**Approaching threshold** (warn: {warn_kg} kg, block: {threshold_kg} kg)"
         status_message = (
-            f"**Optimization Opportunity** — This training job will emit {emissions:.2f} kgCO₂eq. "
-            f"While within limits, there are cleaner alternatives available that could reduce environmental impact significantly."
+            f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which exceeds the "
+            f"warning threshold of {warn_kg} kg. Consider the optimisation suggestions below to "
+            f"reduce environmental impact before this approaches the block threshold of {threshold_kg} kg."
         )
     else:
+        status_emoji = "🟢"   # green circle
+        status_label = "PASSED"
         status_text = "Within acceptable limits"
-        status_message = f"This training job is estimated at {emissions:.2f} kgCO₂eq, which is within your configured limits."
+        status_message = (
+            f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which is within your "
+            f"configured limits (warn: {warn_kg} kg, block: {threshold_kg} kg)."
+        )
 
     # Calculate environmental impact
     savings_pct = (
@@ -892,7 +981,7 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
 |--------|-------|
 | **Carbon Footprint** | {emissions:.2f} kgCO₂eq {status_text} |
 | **Grid Carbon Intensity** | {carbon_intensity} gCO₂/kWh ({config.get('region', 'us-east-1')}) |
-| **Equivalent Impact** | ~{car_miles:.0f} miles driven by car, or {trees_needed:.1f} trees needed to grow for 1 year to absorb the CO2 emissions from the job |
+| **Equivalent Impact** | ~{car_miles:.0f} miles driven by car \u2022 {trees_needed:.2f} tree-years to offset |
 | **Compute Cost** | ~${current_cost:.2f} |
 
 """
@@ -1127,34 +1216,37 @@ def check_gate_status(config, result):
     """Check if the gate should block the PR"""
     status = result["status"]
     threshold_kg = config.get("threshold_kg_co2", 2.0)
+    warn_kg = config.get("warn_kg_co2", 1.0)
     emissions = result["emissions_kg"]
+    crusoe_emissions = result.get("crusoe_emissions_kg", emissions)
+    savings_pct = int(((emissions - crusoe_emissions) / emissions) * 100) if emissions > 0 else 0
 
     if status == "block":
+        print()
         output(
-            f"GATE BLOCKED: Emissions ({emissions:.2f} kg) exceed threshold ({threshold_kg} kg)",
+            f"Carbon Gate BLOCKED \u2014 estimated emissions of {emissions:.2f} kgCO\u2082eq exceed your {threshold_kg} kg threshold",
             "error",
-            {
-                "emissions_kg": emissions,
-                "threshold_kg": threshold_kg,
-                "status": "block",
-            },
         )
-        output("Add 'carbon-override' label to bypass, or reroute to Crusoe", "info")
+        output(
+            f"To proceed: (1) add the 'carbon-override' label, (2) comment '/crusoe-run: reason' to use clean energy ({savings_pct}% less carbon), or (3) optimise the training code",
+            "info",
+        )
         sys.exit(1)
     elif status == "warn":
+        print()
         output(
-            f"WARNING: High carbon emissions ({emissions:.2f} kg)",
+            f"Carbon Gate WARNING \u2014 {emissions:.2f} kgCO\u2082eq exceeds {warn_kg} kg warning threshold (block at {threshold_kg} kg)",
             "warn",
-            {"emissions_kg": emissions, "threshold_kg": threshold_kg, "status": "warn"},
         )
         output(
-            "Consider rerouting to Crusoe or waiting for optimal grid window", "info"
+            f"Tip: Switching to Crusoe would cut emissions to {crusoe_emissions:.2f} kgCO\u2082eq ({savings_pct}% reduction)",
+            "info",
         )
     else:
+        print()
         output(
-            f"GATE PASSED: Emissions ({emissions:.2f} kg) within acceptable limits",
+            f"Carbon Gate PASSED \u2014 {emissions:.2f} kgCO\u2082eq is within limits (warn: {warn_kg} kg, block: {threshold_kg} kg)",
             "success",
-            {"emissions_kg": emissions, "threshold_kg": threshold_kg, "status": "pass"},
         )
 
 
@@ -1209,13 +1301,13 @@ def main():
     
     if emissions_kg >= threshold_kg:
         result["status"] = "block"
-        output(f"Overriding status to 'block' (emissions {emissions_kg:.2f} kg >= threshold {threshold_kg} kg)", "info")
+        output(f"Emissions: {emissions_kg:.2f} kgCO\u2082eq | Thresholds: warn={warn_kg} kg, block={threshold_kg} kg | Status: BLOCK", "info")
     elif emissions_kg >= warn_kg:
         result["status"] = "warn"
-        output(f"Overriding status to 'warn' (emissions {emissions_kg:.2f} kg >= warning {warn_kg} kg)", "info")
+        output(f"Emissions: {emissions_kg:.2f} kgCO\u2082eq | Thresholds: warn={warn_kg} kg, block={threshold_kg} kg | Status: WARN", "info")
     else:
         result["status"] = "pass"
-        output(f"Status: 'pass' (emissions {emissions_kg:.2f} kg < warning {warn_kg} kg)", "info")
+        output(f"Emissions: {emissions_kg:.2f} kgCO\u2082eq | Thresholds: warn={warn_kg} kg, block={threshold_kg} kg | Status: PASS", "info")
 
     # Fetch AI code suggestions + patch from Crusoe
     suggestions = None
