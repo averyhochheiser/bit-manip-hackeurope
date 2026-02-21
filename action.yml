@@ -12,7 +12,7 @@ inputs:
   api-endpoint:
     description: "Carbon Gate API endpoint URL"
     required: true
-    default: "https://carbon-gate.vercel.app"
+    default: "https://bit-manip-hackeurope.vercel.app"
   org-api-key:
     description: "Organization API key for Carbon Gate"
     required: true
