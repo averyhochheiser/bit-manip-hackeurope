@@ -81,7 +81,7 @@ export default async function MarketingPage() {
       </header>
 
       {/* Hero */}
-      <Hero />
+      <Hero isSignedIn={!!user} />
 
       <div className="relative">
         <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />

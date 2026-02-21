@@ -187,7 +187,7 @@ const item = {
 
 /* ── Component ────────────────────────────────────────────────────── */
 
-export function Hero() {
+export function Hero({ isSignedIn = false }: { isSignedIn?: boolean }) {
   const headline = useTextScramble(PUE_EQUATION, FINAL_HEADLINE, {
     startDelay: 900,
     holdMs: 1600,
@@ -269,13 +269,23 @@ export function Hero() {
                   variants={item}
                   className="mt-10 flex flex-wrap items-center gap-4"
                 >
-                  <a
-                    href="/api/auth/signin"
-                    className="group inline-flex items-center gap-2.5 rounded-full bg-[#23282E] px-8 py-4 font-semibold text-[#FFF8F0] shadow-lg shadow-[#23282E]/20 transition-all duration-300 hover:scale-[1.03] hover:bg-sage hover:text-white hover:shadow-sage/30"
-                  >
-                    Sign In with GitHub
-                    <Github size={18} className="ml-1" />
-                  </a>
+                  {isSignedIn ? (
+                    <a
+                      href="/dashboard"
+                      className="group inline-flex items-center gap-2.5 rounded-full bg-[#23282E] px-8 py-4 font-semibold text-[#FFF8F0] shadow-lg shadow-[#23282E]/20 transition-all duration-300 hover:scale-[1.03] hover:bg-sage hover:text-white hover:shadow-sage/30"
+                    >
+                      Go to Dashboard
+                      <ArrowRight size={18} className="ml-1" />
+                    </a>
+                  ) : (
+                    <a
+                      href="/api/auth/signin"
+                      className="group inline-flex items-center gap-2.5 rounded-full bg-[#23282E] px-8 py-4 font-semibold text-[#FFF8F0] shadow-lg shadow-[#23282E]/20 transition-all duration-300 hover:scale-[1.03] hover:bg-sage hover:text-white hover:shadow-sage/30"
+                    >
+                      Sign In with GitHub
+                      <Github size={18} className="ml-1" />
+                    </a>
+                  )}
                   <a
                     href="https://github.com/averyhochheiser/bit-manip-hackeurope"
                     target="_blank"

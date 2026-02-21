@@ -122,6 +122,39 @@ export async function getDashboardReadModel(orgId: string): Promise<DashboardRea
   }
 }
 
+/**
+ * Repos the given GitHub username appears in as a PR author (contributor),
+ * across *all* orgs — not just their own. Used to surface open-source /
+ * cross-org repos on the dashboard.
+ */
+export async function getContributorRepos(githubUsername: string): Promise<RepoReport[]> {
+  if (!githubUsername) return [];
+
+  const { data } = await supabaseAdmin
+    .from("gate_events")
+    .select("repo, emissions_kg, status, contributor")
+    .eq("contributor", githubUsername)
+    .order("created_at", { ascending: false });
+
+  if (!data || data.length === 0) return [];
+
+  const repoMap = new Map<string, { used: number; count: number }>();
+  for (const row of data) {
+    const entry = repoMap.get(row.repo) ?? { used: 0, count: 0 };
+    entry.used += row.emissions_kg ?? 0;
+    entry.count += 1;
+    repoMap.set(row.repo, entry);
+  }
+
+  return Array.from(repoMap.entries()).map(([name, stats]) => ({
+    repo: name,
+    usedKg: round1(stats.used),
+    budgetKg: 10.0,
+    topContributor: githubUsername,
+    totalGatesRun: stats.count,
+  }));
+}
+
 /** Derive the unique repos that have run gate checks for this org. */
 export async function getOrgRepos(orgId: string): Promise<string[]> {
   const { data } = await supabaseAdmin
