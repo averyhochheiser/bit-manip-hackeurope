@@ -260,7 +260,96 @@ python train_model.py
 
 ---
 
-## 📄 License
+## �️ Running the Web App (Dashboard)
+
+The dashboard is a Next.js 16 app. Here's how to get it running locally.
+
+### Prerequisites
+
+- Node.js 20+
+- A Supabase project (URL + service role key)
+- Crusoe API key
+- Electricity Maps API key (sandbox key works)
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure environment variables
+
+Copy the example and fill in your values:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local`:
+
+```bash
+# App
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Supabase — get from supabase.com → project → Settings → API
+NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+
+# Crusoe — NOTE: escape any $ signs with \$ or the value will be corrupted
+CRUSOE_API_KEY=your-key-here
+
+# Electricity Maps — sandbox key works fine for development
+ELECTRICITY_MAPS_API_KEY=your-key-here
+
+# Stripe — leave blank to skip billing (uses mock data)
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_BASE_PRICE_ID=
+STRIPE_METERED_PRICE_ID=
+STRIPE_METER_EVENT_NAME=carbon_usage_kg
+
+# Internal cron auth — can leave blank locally
+CRON_SECRET=
+```
+
+> ⚠️ **Crusoe key gotcha:** If your key contains `$` characters (bcrypt-style keys do), escape each one with `\$` in `.env.local`, otherwise `dotenv-expand` will silently corrupt the value.
+
+### 3. Start the dev server
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+| Route | Description |
+|---|---|
+| `/` | Marketing landing page |
+| `/dashboard` | Carbon usage, gate history, billing overview |
+| `/settings` | Policy thresholds and budget configuration |
+
+### 4. Verify API connectivity
+
+```bash
+curl http://localhost:3000/api/health
+# → { "status": "ok", "services": { "crusoe": "ok", "supabase": "ok" } }
+
+curl http://localhost:3000/api/crusoe/models
+# → { "available": true, "model_count": 7, "models": [...] }
+```
+
+### Other useful commands
+
+```bash
+npm run build      # production build
+npm run typecheck  # TypeScript checks
+npm run lint       # ESLint
+```
+
+---
+
+## �📄 License
 
 MIT License - built for HackEurope 2026
 
