@@ -236,7 +236,7 @@ export function Hero() {
                 {/* Eyebrow */}
                 <motion.div
                   variants={item}
-                  className="mb-6 flex items-center gap-3"
+                  className="mb-3 flex items-center gap-3"
                 >
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-sage">
                     <Zap size={10} />
@@ -245,10 +245,10 @@ export function Hero() {
                 </motion.div>
 
                 {/* Headline Container — stable height to prevent layout jumps during scramble */}
-                <div className="flex min-h-[140px] items-center sm:min-h-[160px] md:min-h-[220px] lg:min-h-[280px]">
+                <div className="flex min-h-[80px] items-center sm:min-h-[96px] md:min-h-[120px] lg:min-h-[144px]">
                   <motion.h1
                     variants={item}
-                    className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-[#23282E] sm:text-5xl md:text-6xl lg:text-7xl"
+                    className="font-display text-3xl font-bold leading-[1.05] tracking-tight text-[#23282E] sm:text-4xl md:text-5xl lg:text-6xl"
                   >
                     {headline}
                   </motion.h1>
@@ -257,7 +257,7 @@ export function Hero() {
                 {/* Subheading */}
                 <motion.p
                   variants={item}
-                  className="mt-6 max-w-xl font-serif text-lg leading-relaxed text-[#23282E]/55 sm:text-xl"
+                  className="mt-4 max-w-xl font-serif text-lg leading-relaxed text-[#23282E]/55 sm:text-xl"
                 >
                   One platform to track, enforce, and reduce your
                   organisation&apos;s carbon footprint across every GitHub repo
