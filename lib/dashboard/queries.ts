@@ -1,18 +1,18 @@
 /**
  * Dashboard read model — aggregates data from Supabase for the dashboard page.
- * Falls back gracefully to mock data if the DB is unavailable or rows are missing.
+ * All queries are scoped to the authenticated user's org_id.
  */
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { MOCK_DASHBOARD } from "./mock-data";
 import type { DashboardReadModel, GateEventDbRow, GateEventRow, KpiItem, RepoReport } from "./types";
 
-export async function getDashboardReadModel(): Promise<DashboardReadModel> {
+export async function getDashboardReadModel(orgId: string): Promise<DashboardReadModel> {
   try {
     // ── Budget ──────────────────────────────────────────────────────────────
     const { data: budget } = await supabaseAdmin
       .from("carbon_budget")
       .select("included_kg, warning_pct")
+      .eq("org_id", orgId)
       .order("period_start", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -20,12 +20,13 @@ export async function getDashboardReadModel(): Promise<DashboardReadModel> {
     const { data: usage } = await supabaseAdmin
       .from("org_usage_mtd")
       .select("used_kg")
+      .eq("org_id", orgId)
       .limit(1)
       .maybeSingle();
 
-    const includedKg = budget?.included_kg ?? MOCK_DASHBOARD.budget.includedKg;
-    const warningPct = budget?.warning_pct ?? MOCK_DASHBOARD.budget.warningPct;
-    const usedKg = usage?.used_kg ?? MOCK_DASHBOARD.budget.usedKg;
+    const includedKg = budget?.included_kg ?? 50;
+    const warningPct = budget?.warning_pct ?? 80;
+    const usedKg = usage?.used_kg ?? 0;
 
     // Naive linear projection to end of 30-day period based on burn rate so far
     const dayOfMonth = new Date().getDate();
@@ -37,20 +38,19 @@ export async function getDashboardReadModel(): Promise<DashboardReadModel> {
       .select(
         "id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at"
       )
+      .eq("org_id", orgId)
       .order("created_at", { ascending: false })
       .limit(50);
 
-    const gateEvents: GateEventRow[] = rawEvents
-      ? (rawEvents as GateEventDbRow[]).map((r) => ({
-        id: r.id,
-        prNumber: r.pr_number,
-        repo: r.repo,
-        branch: "—",  // branch not stored in DB; populated by action in future
-        kgCO2e: r.emissions_kg,
-        status: r.status === "pass" ? "Passed" : "Rerouted to Crusoe",
-        emittedAt: r.created_at,
-      }))
-      : MOCK_DASHBOARD.gateEvents;
+    const gateEvents: GateEventRow[] = (rawEvents ?? []).map((r: GateEventDbRow) => ({
+      id: r.id,
+      prNumber: r.pr_number,
+      repo: r.repo,
+      branch: "—",
+      kgCO2e: r.emissions_kg,
+      status: r.status === "pass" ? "Passed" : "Rerouted to Crusoe",
+      emittedAt: r.created_at,
+    }));
 
     // ── Billing ─────────────────────────────────────────────────────────────
     const UNIT_PRICE = 2.0; // $2 / kgCO₂ overage
@@ -58,7 +58,6 @@ export async function getDashboardReadModel(): Promise<DashboardReadModel> {
     const estimatedCharge = overageKg * UNIT_PRICE;
 
     // ── KPIs ────────────────────────────────────────────────────────────────
-    // Crusoe saves ≈88% of emissions on average (geothermal vs typical grid)
     const totalCrusoeSavings = gateEvents.reduce(
       (sum, e) => sum + e.kgCO2e * 0.88,
       0
@@ -118,9 +117,22 @@ export async function getDashboardReadModel(): Promise<DashboardReadModel> {
       repoReports,
     };
   } catch (err) {
-    console.error("[dashboard] read model failed, using mock data:", err);
-    return MOCK_DASHBOARD;
+    console.error("[dashboard] read model failed:", err);
+    throw err;
   }
+}
+
+/** Derive the unique repos that have run gate checks for this org. */
+export async function getOrgRepos(orgId: string): Promise<string[]> {
+  const { data } = await supabaseAdmin
+    .from("gate_events")
+    .select("repo")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false });
+
+  if (!data) return [];
+  const unique = Array.from(new Set(data.map((r: { repo: string }) => r.repo)));
+  return unique;
 }
 
 function round1(n: number) { return Math.round(n * 10) / 10; }

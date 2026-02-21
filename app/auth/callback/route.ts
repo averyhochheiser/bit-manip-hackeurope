@@ -23,10 +23,15 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (user) {
-    await ensureBillingProfile({
-      userId: user.id,
-      email: user.email ?? null
-    });
+    try {
+      await ensureBillingProfile({
+        userId: user.id,
+        email: user.email ?? null
+      });
+    } catch (err) {
+      console.error("[auth/callback] ensureBillingProfile failed:", err);
+      // Don't block sign-in if billing provisioning fails
+    }
   }
 
   return NextResponse.redirect(new URL(next, request.url));

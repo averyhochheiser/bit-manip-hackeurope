@@ -35,6 +35,8 @@ interface GateCheckRequest {
   estimated_hours:  number;
   region:           string;
   api_key:          string;
+  /** GitHub username of the PR author */
+  pr_author?:       string;
   /** Optional: last N hours of grid intensity for Fourier forecast */
   intensity_history?: number[];
   /** For lifecycle emissions — model size in B params */
@@ -56,6 +58,7 @@ export async function POST(request: Request) {
 
   const {
     repo, pr_number, gpu, estimated_hours, region, api_key,
+    pr_author,
     intensity_history = [],
     model_params_billions = 7.0,
     queries_per_day = 10_000,
@@ -141,6 +144,7 @@ export async function POST(request: Request) {
     status:               result.gate.legacyStatus,
     crusoe_available:     crusoe.available,
     crusoe_instance:      crusoe.recommendedModel,
+    contributor:          pr_author ?? null,
   });
 
   // ── 8. Return enriched response ────────────────────────────────────────
