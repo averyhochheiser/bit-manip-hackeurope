@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { GitBranch, Users, Building2, Plus, Trash2, Shield, Zap, Globe, ChevronRight } from "lucide-react";
+import { GitBranch, Users, Building2, Plus, Trash2, Shield, Zap, Globe, ChevronRight, Key, Copy } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,6 +26,7 @@ type SettingsPanelProps = {
   currentTier?: TierInfo;
   tiers?: TierInfo[];
   usedKg?: number;
+  orgApiKey?: string;
 };
 
 // ── Tier card colours ────────────────────────────────────────────────────────
@@ -45,11 +46,13 @@ export function SettingsPanel({
   currentTier,
   tiers = [],
   usedKg = 0,
+  orgApiKey,
 }: SettingsPanelProps) {
   const [budgetKg, setBudgetKg] = useState(defaultBudgetKg);
   const [warning, setWarning] = useState(initialWarning);
   const [status, setStatus] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"billing" | "org" | "repos" | "teams">("billing");
+  const [keyCopied, setKeyCopied] = useState(false);
 
   const tier = currentTier ?? { id: "free", name: "Starter", includedKg: 50, hardCapKg: 75, basePriceCents: 0, overagePerKgCents: 0, warningPct: 80, overBudgetAction: "block" as const, csrdReporting: false, sbtiReduction: false, regulatoryNote: "" };
 
@@ -273,7 +276,35 @@ export function SettingsPanel({
 
       {/* ── Organisation tab ── */}
       {activeTab === "org" && (
-        <form className="space-y-4" onSubmit={onSubmit}>
+        <div className="space-y-6">
+          {/* API Key section */}
+          <div className="rounded-2xl border border-floral/[0.08] bg-floral/[0.02] p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Key size={14} className="text-sage/60" />
+              <p className="text-xs font-bold uppercase tracking-[0.15em] text-floral/40">API Key</p>
+            </div>
+            <p className="text-[11px] text-floral/50 leading-relaxed mb-3">
+              Add this as a <span className="font-semibold text-floral/70">CARBON_GATE_ORG_KEY</span> secret on each repo where Carbon Gate is installed.
+            </p>
+            {orgApiKey ? (
+              <div className="flex items-center gap-2 rounded-lg border border-floral/[0.08] bg-black/30 px-3 py-2">
+                <code className="flex-1 font-mono text-xs text-floral/70 select-all">
+                  {orgApiKey}
+                </code>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(orgApiKey); setKeyCopied(true); setTimeout(() => setKeyCopied(false), 2000); }}
+                  className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-sage/60 hover:text-sage transition"
+                >
+                  {keyCopied ? "Copied!" : <><Copy size={12} /> Copy</>}
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-floral/30 italic">No API key found. It will be created automatically when you install Carbon Gate on a repo.</p>
+            )}
+          </div>
+
+          {/* Budget form */}
+          <form className="space-y-4" onSubmit={onSubmit}>
           <label className="block text-sm text-floral/75">
             Organisation monthly budget (kgCO₂e)
             <input
@@ -308,6 +339,7 @@ export function SettingsPanel({
             {status ? <span className="text-xs text-floral/60">{status}</span> : null}
           </div>
         </form>
+        </div>
       )}
 
       {/* ── Repositories tab ── */}

@@ -20,8 +20,8 @@ export default async function SettingsPage() {
 
   if (!profile?.org_id) redirect("/");
 
-  // Fetch budget + usage in parallel
-  const [budgetResult, usageResult] = await Promise.all([
+  // Fetch budget + usage + API key in parallel
+  const [budgetResult, usageResult, apiKeyResult] = await Promise.all([
     supabaseAdmin
       .from("carbon_budget")
       .select("included_kg, warning_pct")
@@ -34,10 +34,16 @@ export default async function SettingsPage() {
       .select("used_kg")
       .eq("org_id", profile.org_id)
       .maybeSingle(),
+    supabaseAdmin
+      .from("org_api_keys")
+      .select("api_key")
+      .eq("org_id", profile.org_id)
+      .maybeSingle(),
   ]);
 
   const budget = budgetResult.data;
   const usedKg = (usageResult.data as { used_kg?: number } | null)?.used_kg ?? 0;
+  const orgApiKey = (apiKeyResult.data as { api_key?: string } | null)?.api_key ?? undefined;
   const repos = await getOrgRepos(profile.org_id);
 
   // Resolve current tier and build serialisable tier objects
@@ -82,6 +88,7 @@ export default async function SettingsPage() {
             }}
             tiers={allTiers}
             usedKg={usedKg}
+            orgApiKey={orgApiKey}
           />
         </div>
       </div>
