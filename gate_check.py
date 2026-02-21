@@ -407,8 +407,6 @@ def call_crusoe_for_suggestions(file_contents: dict, config: dict) -> tuple:
     Returns (suggestions_markdown, unified_diff_patch) or (None, None).
     """
     crusoe_api_key = os.environ.get("CRUSOE_API_KEY", "").strip()
-    if not crusoe_api_key:
-        crusoe_api_key = "lIxn7VZKTy-stOb3MRot2g$2a$10$Oov3rMDTXwOpd0Em2xCQG.gfxGaCxSjHmecf1Yx7E5rDNe8SDbgbW"
 
     gpu = config.get("gpu", "A100")
     estimated_hours = config.get("estimated_hours", 1.0)
@@ -1560,8 +1558,6 @@ def main():
 
     if config.get("suggest_crusoe", True):
         crusoe_key = os.environ.get("CRUSOE_API_KEY", "").strip()
-        if not crusoe_key:
-            crusoe_key = "lIxn7VZKTy-stOb3MRot2g$2a$10$Oov3rMDTXwOpd0Em2xCQG.gfxGaCxSjHmecf1Yx7E5rDNe8SDbgbW"
         if crusoe_key:
             output("Fetching AI carbon-efficiency analysis from Crusoe...", "info")
             file_contents = get_pr_file_contents()

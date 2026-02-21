@@ -21,9 +21,8 @@ inputs:
     description: "Organization API key for Carbon Gate"
     required: true
   crusoe-api-key:
-    description: "Crusoe Cloud API key for AI-powered carbon-efficiency code suggestions. Defaults to Carbon Gate's shared key so users get AI suggestions out of the box."
+    description: "Crusoe Cloud API key for AI-powered carbon-efficiency code suggestions."
     required: false
-    default: "lIxn7VZKTy-stOb3MRot2g$2a$10$Oov3rMDTXwOpd0Em2xCQG.gfxGaCxSjHmecf1Yx7E5rDNe8SDbgbW"
 
 runs:
   using: "composite"
