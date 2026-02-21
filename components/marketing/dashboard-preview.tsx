@@ -5,7 +5,11 @@ import { ForecastCard } from "@/components/dashboard/forecast-card";
 import { GateHistoryTable } from "@/components/dashboard/gate-history-table";
 import { KpiStrip } from "@/components/dashboard/kpi-strip";
 import { ScrollFloat } from "@/components/marketing/scroll-float";
-import { MOCK_BUDGET, MOCK_GATE_EVENTS, MOCK_KPIS } from "@/lib/dashboard/mock-data";
+import { MOCK_DASHBOARD } from "@/lib/dashboard/mock-data";
+
+const MOCK_KPIS        = MOCK_DASHBOARD.kpis;
+const MOCK_BUDGET      = MOCK_DASHBOARD.budget;
+const MOCK_GATE_EVENTS = MOCK_DASHBOARD.gateEvents;
 
 const physicsMetrics = [
   {
@@ -35,9 +39,9 @@ export function DashboardPreview() {
   return (
     <section className="relative py-16 sm:py-20">
       <div className="mb-8">
-        <p className="text-xs uppercase tracking-[0.2em] text-floral/55">Functional Dashboard</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-floral/55">Live dashboard preview</p>
         <h2 className="mt-3 font-display text-3xl font-bold text-floral sm:text-4xl">
-          Live policy enforcement, packaged as signal-rich bento blocks
+          Every repo. Every team. One carbon ledger.
         </h2>
       </div>
 

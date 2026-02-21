@@ -5,7 +5,9 @@ Reads carbon-gate.yml config, calls API, and posts PR comment
 """
 
 import os
+import re
 import sys
+import base64
 import yaml
 import requests
 import json
@@ -59,7 +61,14 @@ def output(message: str, level: str = "info", data: Optional[Dict] = None):
 
 
 def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
-    """Fetch changed Python files from the PR and return a formatted diff string."""
+    """
+    Fetch changed Python files from the PR.
+
+    Returns a string with two sections per file:
+      1. The unified diff (so the LLM understands what changed).
+      2. The **full current source** fetched via the Git Blobs API
+         (so the LLM can quote verbatim lines for the <carbon_patch> <old> block).
+    """
     github_token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
@@ -87,12 +96,47 @@ def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
         for f in python_files[:10]:  # cap at 10 files
             filename = f["filename"]
             patch = f.get("patch", "")
+            blob_sha = f.get("sha", "")
             if not patch:
                 continue
+
             snippet = patch[:max_chars_per_file]
-            diff_parts.append(f"### {filename}\n```diff\n{snippet}\n```")
+            section = f"### {filename}\n```diff\n{snippet}\n```"
+
+            # Fetch the actual file source via the Git Blobs API so the LLM
+            # can generate a verbatim <old> block (the diff format with +/- prefixes
+            # cannot be used directly for string-replacement matching).
+            if blob_sha:
+                try:
+                    blob_resp = requests.get(
+                        f"https://api.github.com/repos/{repo}/git/blobs/{blob_sha}",
+                        headers=headers,
+                        timeout=10,
+                    )
+                    if blob_resp.ok:
+                        blob_data = blob_resp.json()
+                        raw = blob_data.get("content", "")
+                        encoding = blob_data.get("encoding", "base64")
+                        if encoding == "base64":
+                            file_src = base64.b64decode(
+                                raw.replace("\n", "").encode()
+                            ).decode("utf-8", errors="replace")
+                        else:
+                            file_src = raw
+                        # Truncate long files — keep first 3 000 chars of source
+                        src_preview = file_src[:3000]
+                        section += (
+                            f"\n\n**Current source of `{filename}`"
+                            f" (quote these lines verbatim in `<old>`):**\n"
+                            f"```python\n{src_preview}\n```"
+                        )
+                        total_chars += len(src_preview)
+                except Exception as e:
+                    output(f"Could not fetch blob for {filename}: {e}", "warn")
+
+            diff_parts.append(section)
             total_chars += len(snippet)
-            if total_chars >= 8000:
+            if total_chars >= 12000:
                 break
 
         return "\n\n".join(diff_parts) if diff_parts else None
@@ -184,7 +228,7 @@ def calculate_emissions_local(gpu: str, hours: float, region: str, config: dict 
     - Carnot-cycle PUE derived from ambient temperature (not a flat assumption)
     - GPU thermal throttling via coupled ODE (scipy RK45)
     - Embodied carbon amortised over GPU lifecycle (Gupta et al. 2022 LCA data)
-    - Uncertainty propagation (\u00b1\u03c3) through the full calculation chain
+    - Uncertainty propagation (±σ) through the full calculation chain
     - WattTime marginal intensity when credentials are available
 
     Falls back to a simplified model if numpy/scipy aren't installed.
@@ -669,11 +713,13 @@ def run_patch_apply_mode(config: dict):
     applied = apply_patch_to_pr(patch)
 
     if applied:
+        why_block = f"\n\n**What was changed and why:**\n\n{suggestions}\n" if suggestions else ""
         _post_reply(
             "⚡ **Crusoe efficiency patch applied!**\n\n"
             "Optimized code has been committed to this branch. "
-            "The Carbon Gate check will re-run automatically on the next push.\n\n"
-            "<details>\n<summary>View applied patch</summary>\n\n"
+            "Re-run or push a new commit to verify reduced emissions."
+            f"{why_block}\n"
+            "<details>\n<summary>View diff</summary>\n\n"
             f"```diff\n{patch}\n```\n\n</details>"
         )
         output("Efficiency patch committed to PR branch", "success")
@@ -683,6 +729,175 @@ def run_patch_apply_mode(config: dict):
             "```bash\n# Save the patch below to efficiency.patch, then:\ngit apply efficiency.patch\n```\n\n"
             f"<details>\n<summary>Patch</summary>\n\n```diff\n{patch}\n```\n\n</details>"
         )
+
+
+# ── Auto-apply helpers ────────────────────────────────────────────────────────
+
+
+def parse_carbon_patch(text: str) -> Optional[Dict[str, str]]:
+    """
+    Extract the <carbon_patch> block from the LLM response.
+    Returns {file, old, new} or None.
+    """
+    m = re.search(
+        r"<carbon_patch>\s*"
+        r"<file>\s*(.+?)\s*</file>\s*"
+        r"<old>\s*\n(.*?)\n\s*</old>\s*"
+        r"<new>\s*\n(.*?)\n\s*</new>\s*"
+        r"</carbon_patch>",
+        text,
+        re.DOTALL,
+    )
+    if not m:
+        return None
+    # Strip leading/trailing newlines only — preserves meaningful indentation
+    # inside the block while preventing spurious whitespace mismatches.
+    return {
+        "file": m.group(1).strip(),
+        "old": m.group(2).strip("\n"),
+        "new": m.group(3).strip("\n"),
+    }
+
+
+def strip_carbon_patch(text: str) -> str:
+    """Remove the machine-readable patch block before posting human-visible comment."""
+    return re.sub(
+        r"\s*<carbon_patch>.*?</carbon_patch>\s*", "\n", text, flags=re.DOTALL
+    ).strip()
+
+
+def get_pr_branch() -> Optional[str]:
+    """
+    Return the head branch name for the current PR.
+
+    Returns None (disabling auto-apply) when:
+      - environment variables are missing
+      - the PR comes from a fork (GITHUB_TOKEN cannot push to fork repos)
+      - the API call fails
+    """
+    github_token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    pr_number = os.environ.get("PR_NUMBER")
+    if not github_token or not repo or not pr_number:
+        return None
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+
+        # Detect fork PRs — GITHUB_TOKEN cannot write to a contributor's fork.
+        head_full = (data.get("head", {}).get("repo") or {}).get("full_name", "")
+        base_full = (data.get("base", {}).get("repo") or {}).get("full_name", "")
+        if head_full and base_full and head_full != base_full:
+            output(
+                f"auto-apply: PR is from a fork ({head_full}) — skipping auto-apply "
+                "(GITHUB_TOKEN cannot push to fork branches). "
+                "Suggestions will still be posted as a comment.",
+                "warn",
+            )
+            return None
+
+        return data["head"]["ref"]
+    except Exception as e:
+        output(f"Could not fetch PR branch: {e}", "warn")
+        return None
+
+
+def apply_patch_to_pr(
+    file_path: str, old_code: str, new_code: str, branch: str
+) -> bool:
+    """
+    Apply a text replacement to a file on the PR branch using the GitHub
+    Contents API, committing the result directly.
+
+    Returns True on success, False on any failure (so callers can fall back
+    gracefully to just posting the suggestion as a comment).
+    """
+    github_token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if not github_token or not repo:
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    # 1. Fetch current file content + SHA
+    url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+    try:
+        r = requests.get(url, params={"ref": branch}, headers=headers, timeout=15)
+        r.raise_for_status()
+        payload = r.json()
+        current_content = base64.b64decode(payload["content"].replace("\n", "")).decode("utf-8")
+        sha = payload["sha"]
+    except Exception as e:
+        output(f"auto-apply: could not fetch {file_path}: {e}", "warn")
+        return False
+
+    # 2. Verify old code is present verbatim
+    if old_code not in current_content:
+        output(
+            f"auto-apply: patch target not found verbatim in {file_path} — skipping",
+            "warn",
+        )
+        return False
+
+    # 3. Apply replacement
+    new_content = current_content.replace(old_code, new_code, 1)
+    if new_content == current_content:
+        output(f"auto-apply: replacement produced no change in {file_path}", "warn")
+        return False
+
+    # 4. Commit back to the PR branch
+    encoded = base64.b64encode(new_content.encode("utf-8")).decode("ascii")
+    pr_number = os.environ.get("PR_NUMBER", "?")
+    try:
+        put_r = requests.put(
+            url,
+            headers=headers,
+            json={
+                "message": f"chore(carbon-gate): auto-apply efficiency patch [PR #{pr_number}]",
+                "content": encoded,
+                "sha": sha,
+                "branch": branch,
+            },
+            timeout=20,
+        )
+        put_r.raise_for_status()
+        output(f"auto-apply: committed optimised {file_path} to {branch}", "success")
+        return True
+    except Exception as e:
+        output(f"auto-apply: commit failed for {file_path}: {e}", "warn")
+        return False
+
+
+def try_auto_apply(suggestions_text: str) -> bool:
+    """
+    Parse the LLM response for a <carbon_patch> block and, if found,
+    apply it to the PR branch.
+
+    Returns True if a patch was successfully committed.
+    """
+    patch = parse_carbon_patch(suggestions_text)
+    if not patch:
+        output("No auto-apply patch found in Crusoe response", "info")
+        return False
+
+    branch = get_pr_branch()
+    if not branch:
+        output("auto-apply: could not determine PR branch", "warn")
+        return False
+
+    output(
+        f"auto-apply: attempting patch on {patch['file']} (branch: {branch})", "info"
+    )
+    return apply_patch_to_pr(patch["file"], patch["old"], patch["new"], branch)
 
 
 def load_config():
@@ -1022,7 +1237,7 @@ def check_crusoe_reroute_command(config: dict) -> Optional[Dict[str, Any]]:
 
 def call_gate_api(config):
     """Call the Carbon Gate API to check emissions. Falls back to local calculation on failure."""
-    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app")
+    api_endpoint = os.environ.get("API_ENDPOINT", "").strip() or "https://bit-manip-hackeurope.vercel.app"
     org_api_key = os.environ.get("ORG_API_KEY", "").strip()
     repo = os.environ.get("GITHUB_REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
@@ -1115,11 +1330,13 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
     crusoe_cost = current_cost * 1.15
     cost_diff_pct = ((crusoe_cost - current_cost) / current_cost) * 100
 
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+
     # Header + Crusoe comparison table
     comment = f"""## {status_emoji} Carbon Gate — {status_label}
 
 **{emissions:.2f} kgCO₂eq** — {limit_note}
-[View dashboard →]({dashboard_url})
+[View full report & repo stats →]({dashboard_url})
 
 ---
 
@@ -1131,39 +1348,30 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
 
 """
 
-    # Code suggestions from Crusoe AI
+    # Crusoe AI CTA — no suggestions/patch shown here; explanation comes after /apply-crusoe-patch
     if suggestions:
         ai_note = "Crusoe Cloud geothermal inference (~5 gCO₂/kWh)" if suggestions_ai_powered else "static analysis"
+        has_patch = bool(patch)
 
-        patch_block = ""
-        if patch:
-            patch_block = f"""
-**Patch:**
-```diff
-{patch}
-```"""
+        suggestion_count = sum(
+            1 for line in suggestions.splitlines()
+            if line.strip() and line.strip()[0].isdigit() and ". " in line[:5]
+        )
+        count_str = f"{suggestion_count} optimization{'s' if suggestion_count != 1 else ''}" if suggestion_count else "optimizations"
 
         comment += f"""---
 
-### 🧠 Code Optimizations via Crusoe AI
+### 🧠 Crusoe AI: {count_str} found
 
 > *Powered by [{ai_note}](https://crusoe.ai)*
 
-<details>
-<summary>View suggestions & patch</summary>
+Crusoe analyzed your code and found changes that could reduce compute time and emissions.
+{'A ready-to-apply patch is available.' if has_patch else 'Manual suggestions are available.'}
 
-{suggestions}
-{patch_block}
-</details>
-
-"""
-
-        if patch:
-            comment += """**To apply these optimizations automatically, comment on this PR:**
+**Comment below — Crusoe will apply the changes and explain what it did:**
 ```
 /apply-crusoe-patch
 ```
-*Carbon Gate will commit the changes to your branch.*
 
 """
 
@@ -1196,7 +1404,6 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
 
 """
 
-    # Compact footer
     security_config = config.get("security", {})
     required_perm = security_config.get("override_permission", "admin")
     timing_note = ""

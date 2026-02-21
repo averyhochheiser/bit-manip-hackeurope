@@ -44,7 +44,12 @@ function Chapter({ children, opacity, y, className }: ChapterProps) {
   return (
     <motion.div
       className={`pointer-events-none sticky top-0 flex min-h-screen flex-col items-center justify-center px-4 ${className || ""}`}
-      style={{ opacity, y }}
+      style={{
+        opacity,
+        y,
+        maskImage: "linear-gradient(to bottom, transparent 0%, black 14%, black 100%)",
+        WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 14%, black 100%)",
+      }}
     >
       {children}
     </motion.div>
@@ -60,28 +65,32 @@ export function StorySection() {
     offset: ["start start", "end end"]
   });
 
-  const ch1Opacity = useTransform(scrollYProgress, [0, 0.12, 0.2, 0.25], [0, 1, 1, 0]);
-  const ch1Y = useTransform(scrollYProgress, [0, 0.12, 0.25], [reducedMotion ? 0 : 40, 0, reducedMotion ? 0 : -30]);
+  // Each chapter: fade-in over ~4% → hold for ~18% → fade-out/fly-up over ~5%
+  // Section is 600vh so 1% ≈ 6vh — each chapter gets ~150vh of readable screen.
+  const EXIT_Y = reducedMotion ? 0 : -600;
 
-  const ch2Opacity = useTransform(scrollYProgress, [0.22, 0.32, 0.42, 0.48], [0, 1, 1, 0]);
-  const ch2Y = useTransform(scrollYProgress, [0.22, 0.32, 0.48], [reducedMotion ? 0 : 40, 0, reducedMotion ? 0 : -30]);
+  const ch1Opacity = useTransform(scrollYProgress, [0, 0.04, 0.22, 0.28], [0, 1, 1, 0]);
+  const ch1Y = useTransform(scrollYProgress, [0, 0.04, 0.22, 0.28], [reducedMotion ? 0 : 24, 0, 0, EXIT_Y]);
 
-  const ch3Opacity = useTransform(scrollYProgress, [0.45, 0.55, 0.65, 0.72], [0, 1, 1, 0]);
-  const ch3Y = useTransform(scrollYProgress, [0.45, 0.55, 0.72], [reducedMotion ? 0 : 40, 0, reducedMotion ? 0 : -30]);
+  const ch2Opacity = useTransform(scrollYProgress, [0.24, 0.29, 0.47, 0.53], [0, 1, 1, 0]);
+  const ch2Y = useTransform(scrollYProgress, [0.24, 0.29, 0.47, 0.53], [reducedMotion ? 0 : 24, 0, 0, EXIT_Y]);
 
-  const ch4Opacity = useTransform(scrollYProgress, [0.7, 0.82, 0.92, 1], [0, 1, 1, 0.85]);
-  const ch4Y = useTransform(scrollYProgress, [0.7, 0.82, 1], [reducedMotion ? 0 : 40, 0, 0]);
+  const ch3Opacity = useTransform(scrollYProgress, [0.49, 0.54, 0.72, 0.78], [0, 1, 1, 0]);
+  const ch3Y = useTransform(scrollYProgress, [0.49, 0.54, 0.72, 0.78], [reducedMotion ? 0 : 24, 0, 0, EXIT_Y]);
+
+  const ch4Opacity = useTransform(scrollYProgress, [0.74, 0.79, 0.96, 1], [0, 1, 1, 0.85]);
+  const ch4Y = useTransform(scrollYProgress, [0.74, 0.79, 1], [reducedMotion ? 0 : 24, 0, 0]);
 
   const sageBg = useTransform(
     scrollYProgress,
-    [0, 0.08, 0.2, 0.25],
+    [0, 0.04, 0.18, 0.24],
     ["rgba(105,153,93,0)", "rgba(105,153,93,0.06)", "rgba(105,153,93,0.06)", "rgba(105,153,93,0)"]
   );
 
   const waveX = useTransform(scrollYProgress, [0, 1], [0, reducedMotion ? 0 : -180]);
 
   return (
-    <section ref={containerRef} className="relative" style={{ height: "400vh" }}>
+    <section ref={containerRef} className="relative" style={{ height: "600vh" }}>
       <motion.div
         className="pointer-events-none sticky top-0 h-screen w-full overflow-hidden"
         style={{ backgroundColor: sageBg }}

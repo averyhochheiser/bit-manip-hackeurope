@@ -9,7 +9,7 @@ on:
 
 permissions:
   pull-requests: write
-  contents: write # needed to commit efficiency patches to PR branches
+  contents: write
 
 jobs:
   carbon-gate:
@@ -19,11 +19,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Run Carbon Gate
         uses: ./ # Uses the action in this repo
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          api-endpoint: ${{ secrets.CARBON_GATE_API_ENDPOINT || 'https://bit-manip-hackeurope.vercel.app' }}
+          api-endpoint: ${{ secrets.CARBON_GATE_API_ENDPOINT }}
           org-api-key: ${{ secrets.CARBON_GATE_ORG_KEY }}
           crusoe-api-key: ${{ secrets.CRUSOE_API_KEY }}
