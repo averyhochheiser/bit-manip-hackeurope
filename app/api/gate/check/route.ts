@@ -1,107 +1,166 @@
-import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
-import { estimateEmissions } from "@/lib/emissions/calculate";
-import { getOrgBudget, getBudgetStatus } from "@/lib/billing/budget";
-import { reportUsageToStripe } from "@/lib/usage/report";
+/**
+ * POST /api/gate/check
+ *
+ * Called by the Carbon Gate GitHub Action (gate_check.py) on every PR.
+ * Authenticates the org via api_key, calculates carbon emissions using
+ * real-time grid data + advanced physics, queries Crusoe for availability,
+ * persists the event, and returns the gate decision.
+ *
+ * Request body:
+ *   { repo, pr_number, gpu, estimated_hours, region, api_key }
+ *
+ * Response:
+ *   { emissions_kg, crusoe_emissions_kg, budget_remaining_kg, status,
+ *     optimal_window, crusoe_available, crusoe_instance,
+ *     carbon_intensity, pue_used }
+ */
 
-type GateCheckPayload = {
-  repo: string;
-  pr_number: number;
-  gpu: string;
-  estimated_hours: number;
-  region: string;
-  api_key?: string;
-};
+import { NextResponse }               from "next/server";
+import { supabaseAdmin }              from "@/lib/supabase/admin";
+import { getCarbonIntensity }         from "@/lib/electricity-maps/client";
+import { getCrusoeAvailability }      from "@/lib/crusoe/client";
+import { calculateEmissions, forecastOptimalWindow } from "@/lib/carbon/calculator";
+
+// ── Request / response types ─────────────────────────────────────────────────
+
+interface GateCheckRequest {
+  repo:             string;
+  pr_number:        number;
+  gpu:              string;
+  estimated_hours:  number;
+  region:           string;
+  api_key:          string;
+}
+
+interface GateCheckResponse {
+  emissions_kg:         number;
+  crusoe_emissions_kg:  number;
+  budget_remaining_kg:  number;
+  status:               "pass" | "warn" | "block";
+  optimal_window:       string;
+  crusoe_available:     boolean;
+  crusoe_instance:      string | null;
+  carbon_intensity:     number;
+  pue_used:             number;
+}
+
+// ── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as GateCheckPayload;
+  // ── 1. Parse & validate input ───────────────────────────────────────────
+  let body: Partial<GateCheckRequest>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
   const { repo, pr_number, gpu, estimated_hours, region, api_key } = body;
 
-  if (!repo || !pr_number || !gpu || !estimated_hours || !region) {
+  if (!api_key) {
+    return NextResponse.json({ error: "Missing api_key." }, { status: 401 });
+  }
+  if (!gpu || !estimated_hours || !region) {
     return NextResponse.json(
-      { error: "Missing required fields: repo, pr_number, gpu, estimated_hours, region" },
+      { error: "Missing required fields: gpu, estimated_hours, region." },
       { status: 400 }
     );
   }
 
-  const orgId = await resolveOrgId(api_key);
-  if (!orgId) {
-    return NextResponse.json({ error: "Invalid or missing api_key" }, { status: 401 });
-  }
-
-  const emissions = estimateEmissions(gpu, estimated_hours, region);
-  const budget = await getOrgBudget(orgId);
-  const budgetStatus = await getBudgetStatus(orgId);
-
-  const status = determineGateStatus(
-    emissions.emissionsKg,
-    budget.thresholdKgCo2,
-    budget.warnKgCo2
-  );
-
-  const overageKg = Math.max(0, emissions.emissionsKg - budget.thresholdKgCo2);
-
-  await supabaseAdmin.from("gate_checks").insert({
-    org_id: orgId,
-    repo,
-    pr_number,
-    gpu,
-    estimated_hours,
-    region,
-    emissions_kg: emissions.emissionsKg,
-    threshold_kg_co2: budget.thresholdKgCo2,
-    warn_kg_co2: budget.warnKgCo2,
-    status,
-    overage_kg: overageKg
-  });
-
-  if ((status === "block" || status === "warn") && overageKg > 0) {
-    await reportUsageToStripe(orgId, overageKg);
-  }
-
-  return NextResponse.json({
-    emissions_kg: emissions.emissionsKg,
-    crusoe_emissions_kg: emissions.crusoeEmissionsKg,
-    budget_remaining_kg: budgetStatus.remainingKg,
-    budget_pct_used: budgetStatus.percentUsed,
-    status,
-    overage_kg: overageKg,
-    optimal_window: "wait 3 hours, save 34%",
-    crusoe_available: true,
-    crusoe_instance: selectCrusoeInstance(gpu),
-    carbon_intensity: emissions.carbonIntensity,
-    pue_used: emissions.pueUsed
-  });
-}
-
-function determineGateStatus(
-  emissionsKg: number,
-  thresholdKg: number,
-  warnKg: number
-): "pass" | "warn" | "block" {
-  if (emissionsKg >= thresholdKg) return "block";
-  if (emissionsKg >= warnKg) return "warn";
-  return "pass";
-}
-
-async function resolveOrgId(apiKey?: string): Promise<string | null> {
-  if (!apiKey) return null;
-
-  const { data } = await supabaseAdmin
-    .from("billing_profiles")
+  // ── 2. Authenticate org via API key ────────────────────────────────────
+  const { data: orgRow, error: orgError } = await supabaseAdmin
+    .from("org_api_keys")
     .select("org_id")
-    .eq("org_api_key", apiKey)
+    .eq("api_key", api_key)
     .maybeSingle();
 
-  return (data?.org_id as string) ?? null;
-}
+  if (orgError || !orgRow) {
+    return NextResponse.json({ error: "Invalid or unknown api_key." }, { status: 401 });
+  }
 
-function selectCrusoeInstance(gpu: string): string {
-  const map: Record<string, string> = {
-    A100: "a100-sxm-80gb-1x",
-    H100: "h100-sxm-80gb-1x",
-    V100: "v100-sxm-32gb-1x",
-    A10: "a10-24gb-1x"
+  const orgId = orgRow.org_id as string;
+
+  // ── 3. Fetch real-time carbon intensity ────────────────────────────────
+  const carbonIntensity = await getCarbonIntensity(region);
+
+  // ── 4. Calculate emissions (thermodynamic PUE + embodied carbon) ───────
+  const emissions = calculateEmissions({
+    gpuType:                gpu,
+    estimatedHours:         estimated_hours,
+    carbonIntensityGPerKwh: carbonIntensity,
+    // TODO: wire in real ambient temp from a weather API
+    ambientTempC:           20,
+  });
+
+  // ── 5. Fetch org carbon budget ─────────────────────────────────────────
+  const { data: budget } = await supabaseAdmin
+    .from("carbon_budget")
+    .select("included_kg, warning_pct")
+    .eq("org_id", orgId)
+    .order("period_start", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: usage } = await supabaseAdmin
+    .from("org_usage_mtd")
+    .select("used_kg")
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  const includedKg  = budget?.included_kg  ?? 50;
+  const warningPct  = budget?.warning_pct  ?? 80;
+  const usedKg      = usage?.used_kg       ?? 0;
+  const budgetRemainingKg = Math.max(0, includedKg - usedKg);
+
+  // ── 6. Gate decision ───────────────────────────────────────────────────
+  const thresholdKg = includedKg;                         // block at 100 %
+  const warnKg      = includedKg * (warningPct / 100);   // warn at warning_pct %
+  const projectedUsed = usedKg + emissions.emissionsKg;
+
+  let status: "pass" | "warn" | "block";
+  if (projectedUsed >= thresholdKg) {
+    status = "block";
+  } else if (projectedUsed >= warnKg) {
+    status = "warn";
+  } else {
+    status = "pass";
+  }
+
+  // ── 7. Crusoe availability ─────────────────────────────────────────────
+  const crusoe = await getCrusoeAvailability(gpu);
+
+  // ── 8. Optimal window forecast ─────────────────────────────────────────
+  const optimalWindow = forecastOptimalWindow(carbonIntensity, region, new Date());
+
+  // ── 9. Persist gate event ──────────────────────────────────────────────
+  await supabaseAdmin.from("gate_events").insert({
+    org_id:               orgId,
+    repo:                 repo ?? "unknown",
+    pr_number:            pr_number ?? 0,
+    gpu,
+    region,
+    estimated_hours,
+    emissions_kg:         emissions.emissionsKg,
+    crusoe_emissions_kg:  emissions.crusoeEmissionsKg,
+    carbon_intensity:     carbonIntensity,
+    pue_used:             emissions.pueUsed,
+    status,
+    crusoe_available:     crusoe.available,
+    crusoe_instance:      crusoe.recommendedModel,
+  });
+
+  // ── 10. Return response ────────────────────────────────────────────────
+  const response: GateCheckResponse = {
+    emissions_kg:         emissions.emissionsKg,
+    crusoe_emissions_kg:  emissions.crusoeEmissionsKg,
+    budget_remaining_kg:  Math.round(budgetRemainingKg * 100) / 100,
+    status,
+    optimal_window:       optimalWindow,
+    crusoe_available:     crusoe.available,
+    crusoe_instance:      crusoe.recommendedModel,
+    carbon_intensity:     carbonIntensity,
+    pue_used:             emissions.pueUsed,
   };
-  return map[gpu] ?? "h100-sxm-80gb-1x";
+
+  return NextResponse.json(response);
 }

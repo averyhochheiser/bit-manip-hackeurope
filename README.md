@@ -24,6 +24,7 @@ Other tools just measure. **We enforce.**
 
 - ✅ Real carbon overage billing (Stripe metered billing)
 - ✅ Mirrors EU CBAM carbon credit markets
+- ✅ Admin-only overrides prevent unauthorized bypass of billing
 - ✅ Advanced thermodynamic PUE modeling (not flat 1.1 assumptions)
 - ✅ Fourier forecasting for optimal training windows
 - ✅ Direct Crusoe API integration for immediate rerouting
@@ -74,6 +75,7 @@ jobs:
 ### 3. Add Repository Secrets
 
 In Settings → Secrets → Actions:
+
 - `CARBON_GATE_ORG_KEY` - Get from [carbon-gate.vercel.app](https://carbon-gate.vercel.app)
 
 ### 4. Open a PR
@@ -124,15 +126,15 @@ This mirrors **EU CBAM** (Carbon Border Adjustment Mechanism) — companies alre
 
 ## 🏗️ Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
+| Component     | Technology                |
+| ------------- | ------------------------- |
 | GitHub Action | Python (composite action) |
-| Backend API | Next.js (Vercel) |
-| Database | Supabase (Postgres) |
-| Billing | Stripe Metered Billing |
-| Carbon Data | Electricity Maps API |
-| Clean Compute | Crusoe API |
-| Calculations | Custom physics models |
+| Backend API   | Next.js (Vercel)          |
+| Database      | Supabase (Postgres)       |
+| Billing       | Stripe Metered Billing    |
+| Carbon Data   | Electricity Maps API      |
+| Clean Compute | Crusoe API                |
+| Calculations  | Custom physics models     |
 
 ---
 
@@ -157,8 +159,6 @@ This is a hackathon project split across 4 people:
 - **Person 3** - Backend API + Crusoe/Electricity Maps integration
 - **Person 4** - Frontend dashboard + Stripe billing
 
-See [PERSON1_README.md](PERSON1_README.md) for Person 1's detailed docs.
-
 ---
 
 ## 📁 Repository Structure
@@ -168,13 +168,14 @@ bit-manip-hackeurope/
 ├── action.yml                    # GitHub Action definition
 ├── gate_check.py                 # Main Python script
 ├── requirements.txt              # Python dependencies
-├── carbon-gate.yml               # Example config
+├── carbon-gate.yml               # Your config
+├── carbon-gate.example.yml       # Example config
 ├── .github/
 │   └── workflows/
 │       └── carbon-gate.yml       # Workflow that triggers action
 ├── demo/
-│   └── train_model.py            # Demo ML training script
-├── PERSON1_README.md             # Person 1 detailed docs
+│   ├── train_model.py            # Demo ML training script
+│   └── README.md                 # Demo documentation
 └── README.md                     # This file
 ```
 
@@ -200,6 +201,7 @@ For the pitch, we'll:
 The action calls `POST /api/gate/check`:
 
 **Request:**
+
 ```json
 {
   "repo": "myorg/myrepo",
@@ -211,6 +213,7 @@ The action calls `POST /api/gate/check`:
 ```
 
 **Response:**
+
 ```json
 {
   "emissions_kg": 3.2,
@@ -260,7 +263,96 @@ python train_model.py
 
 ---
 
-## 📄 License
+## �️ Running the Web App (Dashboard)
+
+The dashboard is a Next.js 16 app. Here's how to get it running locally.
+
+### Prerequisites
+
+- Node.js 20+
+- A Supabase project (URL + service role key)
+- Crusoe API key
+- Electricity Maps API key (sandbox key works)
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure environment variables
+
+Copy the example and fill in your values:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local`:
+
+```bash
+# App
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Supabase — get from supabase.com → project → Settings → API
+NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+
+# Crusoe — NOTE: escape any $ signs with \$ or the value will be corrupted
+CRUSOE_API_KEY=your-key-here
+
+# Electricity Maps — sandbox key works fine for development
+ELECTRICITY_MAPS_API_KEY=your-key-here
+
+# Stripe — leave blank to skip billing (uses mock data)
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_BASE_PRICE_ID=
+STRIPE_METERED_PRICE_ID=
+STRIPE_METER_EVENT_NAME=carbon_usage_kg
+
+# Internal cron auth — can leave blank locally
+CRON_SECRET=
+```
+
+> ⚠️ **Crusoe key gotcha:** If your key contains `$` characters (bcrypt-style keys do), escape each one with `\$` in `.env.local`, otherwise `dotenv-expand` will silently corrupt the value.
+
+### 3. Start the dev server
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+| Route | Description |
+|---|---|
+| `/` | Marketing landing page |
+| `/dashboard` | Carbon usage, gate history, billing overview |
+| `/settings` | Policy thresholds and budget configuration |
+
+### 4. Verify API connectivity
+
+```bash
+curl http://localhost:3000/api/health
+# → { "status": "ok", "services": { "crusoe": "ok", "supabase": "ok" } }
+
+curl http://localhost:3000/api/crusoe/models
+# → { "available": true, "model_count": 7, "models": [...] }
+```
+
+### Other useful commands
+
+```bash
+npm run build      # production build
+npm run typecheck  # TypeScript checks
+npm run lint       # ESLint
+```
+
+---
+
+## �📄 License
 
 MIT License - built for HackEurope 2026
 
@@ -274,4 +366,4 @@ This is a hackathon project built in 30 hours. Contributions welcome after the e
 
 **Built with ❤️ and ⚡ for a sustainable future**
 
-*Track: Crusoe Sustainability | Prize: €1,000 | HackEurope 2026*
+_Track: Crusoe Sustainability | Prize: €1,000 | HackEurope 2026_
