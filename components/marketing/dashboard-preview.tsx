@@ -5,7 +5,11 @@ import { ForecastCard } from "@/components/dashboard/forecast-card";
 import { GateHistoryTable } from "@/components/dashboard/gate-history-table";
 import { KpiStrip } from "@/components/dashboard/kpi-strip";
 import { ScrollFloat } from "@/components/marketing/scroll-float";
-import { MOCK_BUDGET, MOCK_GATE_EVENTS, MOCK_KPIS } from "@/lib/dashboard/mock-data";
+import { MOCK_DASHBOARD } from "@/lib/dashboard/mock-data";
+
+const MOCK_KPIS        = MOCK_DASHBOARD.kpis;
+const MOCK_BUDGET      = MOCK_DASHBOARD.budget;
+const MOCK_GATE_EVENTS = MOCK_DASHBOARD.gateEvents;
 
 const physicsMetrics = [
   {
