@@ -57,3 +57,6 @@ htmlcov/
 demo/checkpoints/
 demo/logs/
 tsconfig.tsbuildinfo
+
+# Raw electricity maps dataset exports (data extracted into code)
+lib/electricity-maps/*.csv
