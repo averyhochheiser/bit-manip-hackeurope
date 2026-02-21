@@ -88,7 +88,7 @@ def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
         return None
 
 
-def get_pr_file_contents(max_files: int = 5) -> Optional[dict]:
+def get_pr_file_contents() -> Optional[dict]:
     """Fetch full content of changed Python files from the PR."""
     github_token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
@@ -113,7 +113,7 @@ def get_pr_file_contents(max_files: int = 5) -> Optional[dict]:
             return None
 
         file_contents = {}
-        for f in python_files[:max_files]:
+        for f in python_files:
             filename = f["filename"]
             # Fetch raw content
             raw_url = f.get("raw_url")
@@ -130,152 +130,6 @@ def get_pr_file_contents(max_files: int = 5) -> Optional[dict]:
 
 CRUSOE_API_BASE = "https://hackeurope.crusoecloud.com/v1"
 CRUSOE_MODEL = "NVFP4/Qwen3-235B-A22B-Instruct-2507-FP4"
-
-
-def call_crusoe_for_refactoring(diff: str, config: dict, files_content: dict) -> Optional[dict]:
-    """
-    Send the PR diff to Crusoe's LLM and return complete refactored code files
-    for carbon efficiency improvements.
-    Returns dict with {filename: refactored_code} or None if unavailable.
-    """
-    crusoe_api_key = os.environ.get("CRUSOE_API_KEY", "").strip()
-    if not crusoe_api_key:
-        return None
-
-    gpu = config.get("gpu", "A100")
-    estimated_hours = config.get("estimated_hours", 1.0)
-
-    # Prepare full file contents for context
-    files_section = ""
-    for filename, content in files_content.items():
-        files_section += f"\n### {filename}\n```python\n{content}\n```\n"
-
-    prompt = f"""You are a carbon-efficiency expert refactoring ML training code to reduce energy consumption.
-
-The training job runs on **{gpu}** GPUs for approximately **{estimated_hours} h** and has HIGH CARBON EMISSIONS.
-
-**Your task:** Refactor the code below to significantly reduce compute time and energy usage while maintaining functionality.
-
-**Focus on:**
-- Adding mixed-precision training (`torch.cuda.amp.autocast`, `GradScaler`)
-- Implementing gradient checkpointing for large models
-- Optimizing data loading (increase `num_workers`, enable `pin_memory`, prefetch)
-- Reducing unnecessary CPU↔GPU transfers
-- Adding early stopping when validation loss plateaus
-- Removing redundant computations or forward passes
-- Optimizing batch size and gradient accumulation
-
-**CRITICAL - Output format (you MUST follow this exactly):**
-
-For each file that needs changes, use this EXACT format:
-
-=== FILENAME: path/to/file.py ===
-```python
-# Complete refactored code here
-import torch
-...
-```
-=== END ===
-
-**Example:**
-=== FILENAME: train.py ===
-```python
-import torch
-from torch.cuda.amp import autocast, GradScaler
-
-def train():
-    model = MyModel().cuda()
-    scaler = GradScaler()
-    ...
-```
-=== END ===
-
-Only refactor files where you can make meaningful carbon-efficiency improvements.
-
-## Current Code
-{files_section}
-
-## Recent Changes (for context)
-{diff}
-
-Provide complete, runnable refactored code."""
-
-    try:
-        response = requests.post(
-            f"{CRUSOE_API_BASE}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {crusoe_api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": CRUSOE_MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 2500,
-                "temperature": 0.2,
-            },
-            timeout=90,
-        )
-        response.raise_for_status()
-        data = response.json()
-        content = data["choices"][0]["message"]["content"].strip()
-        
-        output(f"Received response from Crusoe AI ({len(content)} chars)", "debug")
-        
-        # Debug: Save response to file if in debug mode
-        if os.environ.get("DEBUG_REFACTOR"):
-            with open("crusoe_refactor_response.txt", "w") as f:
-                f.write(content)
-            output("Saved AI response to crusoe_refactor_response.txt", "debug")
-        
-        # Parse the response to extract refactored files
-        refactored = {}
-        
-        # Try parsing with the expected format first
-        if "=== FILENAME:" in content and "=== END ===" in content:
-            parts = content.split("=== FILENAME:")
-            for part in parts[1:]:  # Skip first empty part
-                if "=== END ===" in part:
-                    try:
-                        header, code_section = part.split("===", 1)
-                        filename = header.strip()
-                        code = code_section.replace("END ===", "").strip()
-                        
-                        # Remove markdown code fences if present
-                        if code.startswith("```python") or code.startswith("```"):
-                            lines = code.split("\n")
-                            # Remove first line (```python or ```) and last line (```)
-                            if lines[-1].strip() == "```":
-                                code = "\n".join(lines[1:-1])
-                            else:
-                                code = "\n".join(lines[1:])
-                        
-                        if filename and code:
-                            refactored[filename] = code
-                            output(f"Parsed refactored file: {filename} ({len(code)} chars)", "debug")
-                    except Exception as e:
-                        output(f"Error parsing refactored section: {e}", "warn")
-                        continue
-        else:
-            # Fallback: AI might have just returned code without special markers
-            output("AI response doesn't contain expected format markers, attempting fallback parsing", "warn")
-            # Try to extract any Python code blocks
-            if "```python" in content:
-                blocks = content.split("```python")
-                for i, block in enumerate(blocks[1:], 1):
-                    if "```" in block:
-                        code = block.split("```")[0].strip()
-                        if code:
-                            refactored[f"refactored_code_{i}.py"] = code
-                            output(f"Extracted code block {i} ({len(code)} chars)", "debug")
-        
-        if not refactored:
-            output("No refactored code could be extracted from AI response", "warn")
-            output(f"Response preview: {content[:500]}...", "debug")
-        
-        return refactored if refactored else None
-    except Exception as e:
-        output(f"Crusoe refactoring call failed: {e}", "warn")
-        return None
 
 
 def get_static_suggestions(config: dict) -> str:
@@ -329,42 +183,60 @@ def get_static_suggestions(config: dict) -> str:
         f"{i}. {title}  \n   {body}" for i, (title, body) in enumerate(tips, 1)
     )
 
-def call_crusoe_for_suggestions(diff: str, config: dict) -> Optional[str]:
+def call_crusoe_for_suggestions(file_contents: dict, config: dict) -> tuple:
     """
-    Send the PR diff to Crusoe's LLM and return Markdown suggestions for
-    making the training code more carbon-efficient.
-    Returns None if CRUSOE_API_KEY is absent or the call fails.
+    Send PR file contents to Crusoe AI.
+    Returns (suggestions_markdown, unified_diff_patch) or (None, None).
     """
     crusoe_api_key = os.environ.get("CRUSOE_API_KEY", "").strip()
     if not crusoe_api_key:
-        return None
+        return None, None
 
     gpu = config.get("gpu", "A100")
     estimated_hours = config.get("estimated_hours", 1.0)
 
-    prompt = f"""You are a carbon-efficiency expert reviewing ML training code in a pull request.
+    # Build file listing
+    files_section = ""
+    for filename, content in file_contents.items():
+        files_section += f"\n### {filename}\n```python\n{content}\n```\n"
 
-The training job is configured to run on **{gpu}** GPUs for approximately **{estimated_hours} h**.
+    prompt = f"""You are a carbon-efficiency expert reviewing ML training code.
 
-Analyse the following code changes and provide:
-1. **2–3 specific, actionable suggestions** to reduce compute time and energy consumption.
-2. **A short refactored code snippet** for the single most impactful suggestion (where applicable).
+The training job runs on **{gpu}** GPUs for ~**{estimated_hours} h**.
 
-Focus on concrete patterns such as:
-- Redundant forward/backward passes or unnecessary re-computation
-- Missing mixed-precision (`torch.autocast`) or gradient checkpointing
-- Inefficient data loading (blocking I/O, no `pin_memory`, `num_workers=0`)
-- Suboptimal batch-size / learning-rate schedule choices
-- Unnecessary CPU↔GPU transfers or `.item()` calls inside training loops
-- Early stopping absent when validation loss plateaus
-- Model architecture over-parameterisation for the stated task
+Analyse ALL the Python files below. Provide:
+1. Every actionable suggestion to reduce compute time and energy usage.
+2. A complete unified diff (git patch) that implements ALL your suggestions.
 
-Be specific to the actual code shown. Skip generic advice that doesn't apply.
+Focus on:
+- Missing mixed-precision (torch.autocast / GradScaler)
+- Missing gradient checkpointing
+- Inefficient data loading (num_workers=0, no pin_memory, no prefetch)
+- Suboptimal batch size / learning-rate schedule
+- Unnecessary CPU-GPU transfers or .item() inside loops
+- No early stopping when validation loss plateaus
+- Redundant forward/backward passes
+- Model over-parameterisation
 
-## Changed Python files
-{diff}
+**Output format — follow EXACTLY:**
 
-Respond in Markdown only. Keep the total response under 450 words."""
+## Suggestions
+
+(numbered list of every suggestion, with explanation)
+
+## Patch
+
+```diff
+(unified diff that can be applied with `git apply`)
+(use --- a/path and +++ b/path headers)
+(include all changes across all files)
+```
+
+Be thorough. Do not limit yourself.
+
+## Files
+{files_section}
+"""
 
     try:
         response = requests.post(
@@ -376,17 +248,197 @@ Respond in Markdown only. Keep the total response under 450 words."""
             json={
                 "model": CRUSOE_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 700,
+                "max_tokens": 4096,
                 "temperature": 0.3,
             },
-            timeout=60,
+            timeout=120,
         )
         response.raise_for_status()
         data = response.json()
-        return data["choices"][0]["message"]["content"].strip()
+        raw = data["choices"][0]["message"]["content"].strip()
+
+        # Split into suggestions and patch
+        suggestions = None
+        patch = None
+
+        # Extract suggestions section
+        sug_match = re.search(r'## Suggestions\s*\n(.*?)(?=## Patch|$)', raw, re.DOTALL)
+        if sug_match:
+            suggestions = sug_match.group(1).strip()
+
+        # Extract patch from code fence
+        patch_match = re.search(r'```diff\n(.*?)```', raw, re.DOTALL)
+        if patch_match:
+            candidate = patch_match.group(1).strip()
+            if '--- a/' in candidate:
+                patch = candidate
+            else:
+                output("Patch block found but doesn't look like a unified diff", "warn")
+
+        if not suggestions:
+            # fallback: return the whole response as suggestions
+            suggestions = raw
+
+        return suggestions, patch
     except Exception as e:
-        output(f"Crusoe suggestion call failed: {e}", "warn")
-        return None
+        output(f"Crusoe AI call failed: {e}", "warn")
+        return None, None
+
+
+
+def apply_patch_to_pr(patch: str) -> bool:
+    """
+    Apply a unified diff patch to the PR branch by committing changed files
+    via the GitHub API (no local git needed).
+    Returns True if all files were committed successfully.
+    """
+    import base64
+
+    github_token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    pr_number = os.environ.get("PR_NUMBER")
+
+    if not github_token or not repo or not pr_number:
+        output("Missing env vars for patch apply", "warn")
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    # Get the PR branch ref
+    pr_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+    pr_resp = requests.get(pr_url, headers=headers, timeout=10)
+    if not pr_resp.ok:
+        output(f"Could not fetch PR info: {pr_resp.status_code}", "warn")
+        return False
+    pr_data = pr_resp.json()
+    branch = pr_data["head"]["ref"]
+    head_sha = pr_data["head"]["sha"]
+
+    # Parse patch into per-file changes
+    # We need the original files to apply the patch, so fetch them first
+    file_contents = get_pr_file_contents()
+    if not file_contents:
+        output("Could not fetch file contents for patch apply", "warn")
+        return False
+
+    # Apply the patch using a simple line-based approach
+    # Parse the unified diff
+    current_file = None
+    file_patches = {}  # filename -> list of (old_start, old_lines, new_lines)
+    current_old_lines = []
+    current_new_lines = []
+
+    for line in patch.split("\n"):
+        if line.startswith("--- a/"):
+            pass  # old file header
+        elif line.startswith("+++ b/"):
+            current_file = line[6:]
+            if current_file not in file_patches:
+                file_patches[current_file] = []
+        elif line.startswith("@@"):
+            # hunk header
+            pass
+        elif current_file:
+            if not line.startswith("---") and not line.startswith("+++"):
+                pass  # we'll use the simpler approach below
+
+    # Simpler approach: ask Crusoe for full file content, then commit those
+    # Actually, we have the patch — let's apply it with subprocess if available
+    import subprocess
+    import tempfile
+
+    applied_files = {}
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Write original files
+            for filename, content in file_contents.items():
+                filepath = os.path.join(tmpdir, filename)
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                with open(filepath, 'w') as f:
+                    f.write(content)
+
+            # Write patch file
+            patch_path = os.path.join(tmpdir, 'efficiency.patch')
+            with open(patch_path, 'w') as f:
+                f.write(patch)
+
+            # Try to apply
+            result = subprocess.run(
+                ['git', 'apply', '--stat', patch_path],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            output(f"Patch stats: {result.stdout.strip()}", "debug")
+
+            # Actually apply
+            result = subprocess.run(
+                ['git', 'apply', '--no-index', patch_path],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0:
+                output(f"git apply failed: {result.stderr}", "warn")
+                return False
+
+            # Read back the modified files
+            for filename in file_contents:
+                filepath = os.path.join(tmpdir, filename)
+                if os.path.exists(filepath):
+                    with open(filepath, 'r') as f:
+                        new_content = f.read()
+                    if new_content != file_contents[filename]:
+                        applied_files[filename] = new_content
+    except Exception as e:
+        output(f"Patch apply failed: {e}", "warn")
+        return False
+
+    if not applied_files:
+        output("Patch applied but no files changed", "warn")
+        return False
+
+    # Commit each changed file via GitHub API
+    committed = 0
+    latest_sha = head_sha
+
+    for filename, new_content in applied_files.items():
+        # Get current file SHA
+        file_url = f"https://api.github.com/repos/{repo}/contents/{filename}?ref={branch}"
+        file_resp = requests.get(file_url, headers=headers, timeout=10)
+        if not file_resp.ok:
+            output(f"Could not get file SHA for {filename}: {file_resp.status_code}", "warn")
+            continue
+        file_sha = file_resp.json()["sha"]
+
+        # Update the file
+        encoded = base64.b64encode(new_content.encode('utf-8')).decode('ascii')
+        update_url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+        update_resp = requests.put(
+            update_url,
+            headers=headers,
+            json={
+                "message": f"\u26a1 Carbon Gate: apply efficiency patch to {filename}",
+                "content": encoded,
+                "sha": file_sha,
+                "branch": branch,
+            },
+            timeout=15,
+        )
+        if update_resp.ok:
+            committed += 1
+            output(f"Committed optimized {filename} to {branch}", "success")
+        else:
+            output(f"Failed to commit {filename}: {update_resp.status_code} {update_resp.text[:200]}", "warn")
+
+    output(f"Applied efficiency patch: {committed}/{len(applied_files)} files committed to {branch}", "info")
+    return committed > 0
 
 
 def load_config():
@@ -781,7 +833,7 @@ def call_gate_api(config):
         }
 
 
-def format_pr_comment(config, result, suggestions: Optional[str] = None, refactored_code: Optional[dict] = None, suggestions_ai_powered: bool = True):
+def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: Optional[str] = None, patch_applied: bool = False, suggestions_ai_powered: bool = True):
     """Format the Carbon Gate report as a PR comment with educational, firm tone"""
     emissions = result["emissions_kg"]
     crusoe_emissions = result["crusoe_emissions_kg"]
@@ -937,32 +989,56 @@ Running your job when grid carbon intensity is lower can significantly reduce em
 
 """
 
-    if refactored_code:
-        comment += """---
 
-### 🤖 AI-Generated Carbon-Optimized Code
+    if patch:
+        if patch_applied:
+            comment += """---
 
-> *Crusoe AI has refactored your code to reduce energy consumption*
+### \u26a1 Efficiency Patch Applied
 
-"""
-        for filename, code in refactored_code.items():
-            comment += f"""<details>
-<summary><b>📄 {filename}</b> — Click to view refactored code</summary>
+> **Carbon Gate has automatically committed optimized code to this PR branch.**
+> The patch implements the suggestions above. Review the new commit and re-run the check to see reduced emissions.
 
-```python
-{code}
+<details>
+<summary>View applied patch</summary>
+
+```diff
+""" + patch + """
 ```
-
-**To apply this refactoring:**
-1. Review the changes carefully
-2. Copy the refactored code above
-3. Replace your current implementation
-4. Test thoroughly before merging
-5. Re-run the Carbon Gate check to see the reduction
 
 </details>
 
 """
+        else:
+            comment += """---
+
+### \U0001f527 Efficiency Patch Available
+
+> Carbon Gate generated a patch to implement the suggestions above. Apply it to your branch:
+
+```bash
+# Download and apply the patch
+curl -sL "PATCH_URL" | git apply
+# Or copy the diff below and run:
+# git apply < efficiency.patch
+```
+
+<details>
+<summary>View patch (click to expand)</summary>
+
+```diff
+""" + patch + """
+```
+
+</details>
+
+**To apply manually:**
+1. Copy the diff above into a file called `efficiency.patch`
+2. Run `git apply efficiency.patch`
+3. Commit and push — the Carbon Gate check will re-run automatically
+
+"""
+
 
     comment += """---
 
@@ -1141,27 +1217,37 @@ def main():
         result["status"] = "pass"
         output(f"Status: 'pass' (emissions {emissions_kg:.2f} kg < warning {warn_kg} kg)", "info")
 
-    # Fetch AI code suggestions from Crusoe (opt-in via suggest_crusoe config + CRUSOE_API_KEY)
+    # Fetch AI code suggestions + patch from Crusoe
     suggestions = None
-    refactored_code = None
-    
+    patch = None
+    patch_applied = False
     suggestions_ai_powered = False
+
     if config.get("suggest_crusoe", True):
         crusoe_key = os.environ.get("CRUSOE_API_KEY", "").strip()
         if crusoe_key:
-            output("Fetching AI carbon-efficiency suggestions from Crusoe...", "info")
-            diff = get_pr_diff()
-            if diff:
-                suggestions = call_crusoe_for_suggestions(diff, config)
+            output("Fetching AI carbon-efficiency analysis from Crusoe...", "info")
+            file_contents = get_pr_file_contents()
+            if file_contents:
+                suggestions, patch = call_crusoe_for_suggestions(file_contents, config)
                 if suggestions:
                     suggestions_ai_powered = True
-                    output("AI suggestions generated successfully", "success")
+                    output("AI analysis generated successfully", "success")
                 else:
                     output("Crusoe API returned no content, using static suggestions", "warn")
+
+                # Auto-apply patch to PR branch if available
+                if patch:
+                    output(f"Unified diff patch generated ({len(patch)} chars)", "info")
+                    patch_applied = apply_patch_to_pr(patch)
+                    if patch_applied:
+                        output("Efficiency patch committed to PR branch", "success")
+                    else:
+                        output("Could not auto-apply patch (will show in comment for manual apply)", "warn")
             else:
-                output("No Python file changes found in PR diff, using static suggestions", "info")
+                output("No Python files found in PR, using static suggestions", "info")
         else:
-            output("CRUSOE_API_KEY not set — using static efficiency suggestions", "warn")
+            output("CRUSOE_API_KEY not set " + chr(8212) + " using static efficiency suggestions", "warn")
 
         if not suggestions:
             suggestions = get_static_suggestions(config)
@@ -1169,34 +1255,8 @@ def main():
     else:
         output("AI suggestions disabled (suggest_crusoe: false in config)", "info")
 
-    # Generate refactored code for high-emission PRs (opt-in via auto_refactor config)
-    status = result.get("status", "pass")
-    if (
-        config.get("auto_refactor", False)
-        and os.environ.get("CRUSOE_API_KEY", "").strip()
-        and status in ["warn", "block"]
-    ):
-        output(f"High emissions detected ({status}), generating AI code refactoring...", "info")
-        diff = get_pr_diff()
-        file_contents = get_pr_file_contents()
-        
-        if diff and file_contents:
-            try:
-                refactored_code = call_crusoe_for_refactoring(diff, config, file_contents)
-                if refactored_code:
-                    file_count = len(refactored_code)
-                    output(f"Successfully generated refactored code for {file_count} file(s)", "success")
-                    output(f"Files refactored: {', '.join(refactored_code.keys())}", "debug")
-                else:
-                    output("Crusoe refactoring call returned no content, skipping", "warn")
-            except Exception as e:
-                output(f"Error during refactoring: {e}", "error")
-                refactored_code = None
-        else:
-            output("No Python files to refactor", "info")
-
     # Format and post PR comment
-    comment = format_pr_comment(config, result, suggestions, refactored_code, suggestions_ai_powered)
+    comment = format_pr_comment(config, result, suggestions, patch, patch_applied, suggestions_ai_powered)
     post_pr_comment(comment)
 
     # Check if gate should block
