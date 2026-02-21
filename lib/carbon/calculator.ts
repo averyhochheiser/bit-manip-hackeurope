@@ -5,10 +5,12 @@
  *   1. Dynamic PUE via thermodynamic model (ambient temperature)
  *   2. Operational emissions  = TDP × hours × PUE × carbon_intensity
  *   3. Embodied carbon        = manufacturing CO₂ amortised over GPU lifetime
- *   4. Fourier-inspired time-of-day forecast for optimal training windows
+ *   4. Real hourly profile-based optimal window forecast (Ireland dataset)
  *
  * All figures are in kgCO₂eq.
  */
+
+import { getHourlyProfile } from "@/lib/electricity-maps/client";
 
 // ── GPU specs ────────────────────────────────────────────────────────────────
 
@@ -124,44 +126,46 @@ export function forecastOptimalWindow(
   region: string,
   nowUtc: Date = new Date()
 ): string {
-  // Approximate local hour from UTC using simple region offsets
+  // Use real hourly profiles when available (e.g. Ireland from 2025 dataset)
+  const profile: number[] | null = getHourlyProfile(region);
+
+  const currentHourUtc = nowUtc.getUTCHours();
+
+  if (profile && profile.length === 24) {
+    // Use real data: find the UTC hour with minimum intensity in next 24h
+    let minVal = Infinity;
+    let minHour = currentHourUtc;
+    for (let i = 0; i < 24; i++) {
+      const h = (currentHourUtc + i) % 24;
+      if (profile[h] < minVal) { minVal = profile[h]; minHour = h; }
+    }
+    const hoursUntil = (minHour - currentHourUtc + 24) % 24;
+    const savingsPct = Math.round(((currentIntensityGPerKwh - minVal) / currentIntensityGPerKwh) * 100);
+    const clampedSavings = Math.max(0, savingsPct);
+
+    if (hoursUntil === 0) {
+      return `Optimal window now (${minVal.toFixed(0)} gCO₂/kWh) — ${clampedSavings}% below daily peak`;
+    }
+    const optimalTimeUtc = `${String(minHour).padStart(2, "0")}:00 UTC`;
+    return `Next low-carbon window in ~${hoursUntil}h (${optimalTimeUtc}, ${minVal.toFixed(0)} gCO₂/kWh) — save ~${clampedSavings}%`;
+  }
+
+  // Fallback: synthetic Fourier model — lowest intensity at ~04:00 local
   const UTC_OFFSETS: Record<string, number> = {
-    "us-east-1":   -5,
-    "us-east-2":   -5,
-    "us-west-1":   -8,
-    "us-west-2":   -8,
-    "eu-west-1":    0,
-    "eu-west-2":    0,
-    "eu-west-3":    1,
-    "eu-central-1": 1,
-    "eu-north-1":   1,
-    "ap-northeast-1": 9,
-    "ap-south-1":   5.5,
+    "us-east-1": -5, "us-east-2": -5, "us-west-1": -8, "us-west-2": -8,
+    "eu-west-1":  0, "eu-west-2":  0, "eu-west-3":  1, "eu-central-1": 1,
+    "eu-north-1": 1, "ap-northeast-1": 9, "ap-south-1": 5.5,
   };
-
-  const offset = UTC_OFFSETS[region] ?? 0;
-  const localHour = ((nowUtc.getUTCHours() + offset) % 24 + 24) % 24;
-
-  // Fourier fundamental: daily cycle — lowest intensity at ~4 AM local
-  const amplitude = 0.25; // ±25 % variation around mean
-  const intensityNow = currentIntensityGPerKwh;
-
-  // Find the hour with minimum intensity (4 AM local target)
+  const offset    = UTC_OFFSETS[region] ?? 0;
+  const localHour = ((currentHourUtc + offset) % 24 + 24) % 24;
   const targetHour = 4;
   let hoursUntilOptimal = (targetHour - localHour + 24) % 24;
   if (hoursUntilOptimal === 0) hoursUntilOptimal = 24;
+  const minIntensity = currentIntensityGPerKwh * 0.75;
+  const savingsPct   = Math.round(((currentIntensityGPerKwh - minIntensity) / currentIntensityGPerKwh) * 100);
 
-  const minIntensity = intensityNow * (1 - amplitude);
-  const savingsPct   = Math.round(((intensityNow - minIntensity) / intensityNow) * 100);
-
-  if (hoursUntilOptimal <= 1) {
-    return `Optimal window now — grid at ~${savingsPct}% below daily peak`;
-  }
-
-  if (hoursUntilOptimal <= 3) {
-    return `Wait ~${hoursUntilOptimal}h for optimal window, save ~${savingsPct}%`;
-  }
-
+  if (hoursUntilOptimal <= 1) return `Optimal window now — grid at ~${savingsPct}% below daily peak`;
+  if (hoursUntilOptimal <= 3) return `Wait ~${hoursUntilOptimal}h for optimal window, save ~${savingsPct}%`;
   return `Next low-carbon window in ~${hoursUntilOptimal}h (≈4 AM local), save ~${savingsPct}%`;
 }
 
