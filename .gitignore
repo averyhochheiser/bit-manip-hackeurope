@@ -56,3 +56,4 @@ htmlcov/
 # Demo outputs
 demo/checkpoints/
 demo/logs/
+tsconfig.tsbuildinfo
