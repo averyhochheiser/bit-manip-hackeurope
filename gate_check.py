@@ -88,8 +88,137 @@ def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
         return None
 
 
+def get_pr_file_contents(max_files: int = 5) -> Optional[dict]:
+    """Fetch full content of changed Python files from the PR."""
+    github_token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    pr_number = os.environ.get("PR_NUMBER")
+
+    if not github_token or not repo or not pr_number:
+        return None
+
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/files"
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        files = response.json()
+
+        python_files = [f for f in files if f.get("filename", "").endswith(".py")]
+        if not python_files:
+            return None
+
+        file_contents = {}
+        for f in python_files[:max_files]:
+            filename = f["filename"]
+            # Fetch raw content
+            raw_url = f.get("raw_url")
+            if raw_url:
+                content_response = requests.get(raw_url, headers=headers, timeout=10)
+                if content_response.ok:
+                    file_contents[filename] = content_response.text
+
+        return file_contents if file_contents else None
+    except requests.exceptions.RequestException as e:
+        output(f"Could not fetch PR file contents: {e}", "warn")
+        return None
+
+
 CRUSOE_API_BASE = "https://hackeurope.crusoecloud.com/v1"
 CRUSOE_MODEL = "NVFP4/Qwen3-235B-A22B-Instruct-2507-FP4"
+
+
+def call_crusoe_for_refactoring(diff: str, config: dict, files_content: dict) -> Optional[dict]:
+    """
+    Send the PR diff to Crusoe's LLM and return complete refactored code files
+    for carbon efficiency improvements.
+    Returns dict with {filename: refactored_code} or None if unavailable.
+    """
+    crusoe_api_key = os.environ.get("CRUSOE_API_KEY", "").strip()
+    if not crusoe_api_key:
+        return None
+
+    gpu = config.get("gpu", "A100")
+    estimated_hours = config.get("estimated_hours", 1.0)
+
+    # Prepare full file contents for context
+    files_section = ""
+    for filename, content in files_content.items():
+        files_section += f"\n### {filename}\n```python\n{content}\n```\n"
+
+    prompt = f"""You are a carbon-efficiency expert refactoring ML training code to reduce energy consumption.
+
+The training job runs on **{gpu}** GPUs for approximately **{estimated_hours} h** and has HIGH CARBON EMISSIONS.
+
+**Your task:** Refactor the code below to significantly reduce compute time and energy usage while maintaining functionality.
+
+**Focus on:**
+- Adding mixed-precision training (`torch.cuda.amp.autocast`, `GradScaler`)
+- Implementing gradient checkpointing for large models
+- Optimizing data loading (increase `num_workers`, enable `pin_memory`, prefetch)
+- Reducing unnecessary CPU↔GPU transfers
+- Adding early stopping when validation loss plateaus
+- Removing redundant computations or forward passes
+- Optimizing batch size and gradient accumulation
+
+**Output format:**
+For each file that needs changes, output:
+```
+=== FILENAME: path/to/file.py ===
+[complete refactored code here]
+=== END ===
+```
+
+Only refactor files where you can make meaningful carbon-efficiency improvements.
+
+## Current Code
+{files_section}
+
+## Recent Changes (for context)
+{diff}
+
+Provide complete, runnable refactored code."""
+
+    try:
+        response = requests.post(
+            f"{CRUSOE_API_BASE}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {crusoe_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": CRUSOE_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 2500,
+                "temperature": 0.2,
+            },
+            timeout=90,
+        )
+        response.raise_for_status()
+        data = response.json()
+        content = data["choices"][0]["message"]["content"].strip()
+        
+        # Parse the response to extract refactored files
+        refactored = {}
+        parts = content.split("=== FILENAME:")
+        for part in parts[1:]:  # Skip first empty part
+            if "=== END ===" in part:
+                header, code_section = part.split("===", 1)
+                filename = header.strip()
+                code = code_section.replace("END ===", "").strip()
+                # Remove markdown code fences if present
+                if code.startswith("```python") or code.startswith("```"):
+                    code = "\n".join(code.split("\n")[1:-1])  # Remove first and last line
+                refactored[filename] = code
+        
+        return refactored if refactored else None
+    except Exception as e:
+        output(f"Crusoe refactoring call failed: {e}", "warn")
+        return None
 
 
 def call_crusoe_for_suggestions(diff: str, config: dict) -> Optional[str]:
@@ -544,7 +673,7 @@ def call_gate_api(config):
         }
 
 
-def format_pr_comment(config, result, suggestions: Optional[str] = None):
+def format_pr_comment(config, result, suggestions: Optional[str] = None, refactored_code: Optional[dict] = None):
     """Format the Carbon Gate report as a PR comment with educational, firm tone"""
     emissions = result["emissions_kg"]
     crusoe_emissions = result["crusoe_emissions_kg"]
@@ -690,9 +819,36 @@ Running your job when grid carbon intensity is lower can significantly reduce em
 
 ### AI Code Efficiency Analysis
 
-> *Analysed by [Crusoe Cloud](https://crusoe.ai) \u2014 geothermal-powered AI inference (~5\u202fgCO\u2082/kWh)*
+> *Analysed by [Crusoe Cloud](https://crusoe.ai) — geothermal-powered AI inference (~5 gCO₂/kWh)*
 
 {suggestions}
+
+"""
+
+    if refactored_code:
+        comment += """---
+
+### 🤖 AI-Generated Carbon-Optimized Code
+
+> *Crusoe AI has refactored your code to reduce energy consumption*
+
+"""
+        for filename, code in refactored_code.items():
+            comment += f"""<details>
+<summary><b>📄 {filename}</b> — Click to view refactored code</summary>
+
+```python
+{code}
+```
+
+**To apply this refactoring:**
+1. Review the changes carefully
+2. Copy the refactored code above
+3. Replace your current implementation
+4. Test thoroughly before merging
+5. Re-run the Carbon Gate check to see the reduction
+
+</details>
 
 """
 
@@ -859,6 +1015,8 @@ def main():
 
     # Fetch AI code suggestions from Crusoe (opt-in via suggest_crusoe config + CRUSOE_API_KEY)
     suggestions = None
+    refactored_code = None
+    
     if (
         config.get("suggest_crusoe", True)
         and os.environ.get("CRUSOE_API_KEY", "").strip()
@@ -877,8 +1035,29 @@ def main():
                 "info",
             )
 
+    # Generate refactored code for high-emission PRs (opt-in via auto_refactor config)
+    status = result.get("status", "pass")
+    if (
+        config.get("auto_refactor", False)
+        and os.environ.get("CRUSOE_API_KEY", "").strip()
+        and status in ["warn", "block"]
+    ):
+        output(f"High emissions detected ({status}), generating AI code refactoring...", "info")
+        diff = get_pr_diff()
+        file_contents = get_pr_file_contents()
+        
+        if diff and file_contents:
+            refactored_code = call_crusoe_for_refactoring(diff, config, file_contents)
+            if refactored_code:
+                file_count = len(refactored_code)
+                output(f"Successfully generated refactored code for {file_count} file(s)", "success")
+            else:
+                output("Crusoe refactoring call returned no content, skipping", "warn")
+        else:
+            output("No Python files to refactor", "info")
+
     # Format and post PR comment
-    comment = format_pr_comment(config, result, suggestions)
+    comment = format_pr_comment(config, result, suggestions, refactored_code)
     post_pr_comment(comment)
 
     # Check if gate should block
