@@ -1,5 +1,9 @@
 name: "Carbon Gate"
-description: "Estimate carbon emissions of ML training jobs and gate PR merges based on configurable thresholds"
+description: >-
+  Estimate carbon emissions of ML training jobs and gate PR merges based on
+  configurable thresholds. Auto-applies Crusoe AI efficiency patches to PR
+  branches when CRUSOE_API_KEY is set.
+  REQUIRED workflow permissions: contents: write  pull-requests: write
 author: "Carbon Gate Team"
 branding:
   icon: "cloud"

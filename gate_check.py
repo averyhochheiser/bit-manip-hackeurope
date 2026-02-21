@@ -5,7 +5,9 @@ Reads carbon-gate.yml config, calls API, and posts PR comment
 """
 
 import os
+import re
 import sys
+import base64
 import yaml
 import requests
 import json
@@ -46,7 +48,14 @@ def output(message: str, level: str = "info", data: Optional[Dict] = None):
 
 
 def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
-    """Fetch changed Python files from the PR and return a formatted diff string."""
+    """
+    Fetch changed Python files from the PR.
+
+    Returns a string with two sections per file:
+      1. The unified diff (so the LLM understands what changed).
+      2. The **full current source** fetched via the Git Blobs API
+         (so the LLM can quote verbatim lines for the <carbon_patch> <old> block).
+    """
     github_token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
@@ -74,12 +83,47 @@ def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
         for f in python_files[:10]:  # cap at 10 files
             filename = f["filename"]
             patch = f.get("patch", "")
+            blob_sha = f.get("sha", "")
             if not patch:
                 continue
+
             snippet = patch[:max_chars_per_file]
-            diff_parts.append(f"### {filename}\n```diff\n{snippet}\n```")
+            section = f"### {filename}\n```diff\n{snippet}\n```"
+
+            # Fetch the actual file source via the Git Blobs API so the LLM
+            # can generate a verbatim <old> block (the diff format with +/- prefixes
+            # cannot be used directly for string-replacement matching).
+            if blob_sha:
+                try:
+                    blob_resp = requests.get(
+                        f"https://api.github.com/repos/{repo}/git/blobs/{blob_sha}",
+                        headers=headers,
+                        timeout=10,
+                    )
+                    if blob_resp.ok:
+                        blob_data = blob_resp.json()
+                        raw = blob_data.get("content", "")
+                        encoding = blob_data.get("encoding", "base64")
+                        if encoding == "base64":
+                            file_src = base64.b64decode(
+                                raw.replace("\n", "").encode()
+                            ).decode("utf-8", errors="replace")
+                        else:
+                            file_src = raw
+                        # Truncate long files — keep first 3 000 chars of source
+                        src_preview = file_src[:3000]
+                        section += (
+                            f"\n\n**Current source of `{filename}`"
+                            f" (quote these lines verbatim in `<old>`):**\n"
+                            f"```python\n{src_preview}\n```"
+                        )
+                        total_chars += len(src_preview)
+                except Exception as e:
+                    output(f"Could not fetch blob for {filename}: {e}", "warn")
+
+            diff_parts.append(section)
             total_chars += len(snippet)
-            if total_chars >= 8000:
+            if total_chars >= 12000:
                 break
 
         return "\n\n".join(diff_parts) if diff_parts else None
@@ -180,9 +224,6 @@ Keep the human-readable part under 400 words. The patch block is not counted.
 
 # ── Auto-apply helpers ────────────────────────────────────────────────────────
 
-import re
-import base64
-
 
 def parse_carbon_patch(text: str) -> Optional[Dict[str, str]]:
     """
@@ -200,7 +241,13 @@ def parse_carbon_patch(text: str) -> Optional[Dict[str, str]]:
     )
     if not m:
         return None
-    return {"file": m.group(1).strip(), "old": m.group(2), "new": m.group(3)}
+    # Strip leading/trailing newlines only — preserves meaningful indentation
+    # inside the block while preventing spurious whitespace mismatches.
+    return {
+        "file": m.group(1).strip(),
+        "old": m.group(2).strip("\n"),
+        "new": m.group(3).strip("\n"),
+    }
 
 
 def strip_carbon_patch(text: str) -> str:
@@ -211,7 +258,14 @@ def strip_carbon_patch(text: str) -> str:
 
 
 def get_pr_branch() -> Optional[str]:
-    """Return the head branch name for the current PR."""
+    """
+    Return the head branch name for the current PR.
+
+    Returns None (disabling auto-apply) when:
+      - environment variables are missing
+      - the PR comes from a fork (GITHUB_TOKEN cannot push to fork repos)
+      - the API call fails
+    """
     github_token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
@@ -225,7 +279,21 @@ def get_pr_branch() -> Optional[str]:
     try:
         r = requests.get(url, headers=headers, timeout=10)
         r.raise_for_status()
-        return r.json()["head"]["ref"]
+        data = r.json()
+
+        # Detect fork PRs — GITHUB_TOKEN cannot write to a contributor's fork.
+        head_full = (data.get("head", {}).get("repo") or {}).get("full_name", "")
+        base_full = (data.get("base", {}).get("repo") or {}).get("full_name", "")
+        if head_full and base_full and head_full != base_full:
+            output(
+                f"auto-apply: PR is from a fork ({head_full}) — skipping auto-apply "
+                "(GITHUB_TOKEN cannot push to fork branches). "
+                "Suggestions will still be posted as a comment.",
+                "warn",
+            )
+            return None
+
+        return data["head"]["ref"]
     except Exception as e:
         output(f"Could not fetch PR branch: {e}", "warn")
         return None
