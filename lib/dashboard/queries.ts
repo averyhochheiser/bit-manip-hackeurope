@@ -111,6 +111,7 @@ export async function getDashboardReadModel(orgId: string): Promise<DashboardRea
       budgetKg: round1(repoBudgets.get(name) ?? (includedKg / activeCount)),
       topContributor: "PR Author",
       totalGatesRun: stats.count,
+      hasGateData: true,
     }));
 
     return {
@@ -240,6 +241,7 @@ export async function getGlobalDashboardPreview(): Promise<DashboardReadModel> {
       budgetKg: round1(globalBudgets.get(name) ?? (budgetKg / Math.max(1, repoMap.size))),
       topContributor: "PR Author",
       totalGatesRun: stats.count,
+      hasGateData: true,
     }));
 
     return {
