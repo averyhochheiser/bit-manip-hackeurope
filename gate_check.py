@@ -737,6 +737,7 @@ def call_gate_api(config):
         output("Not a pull request event, skipping Carbon Gate check", "info")
         sys.exit(0)
 
+    pr_author = os.environ.get("PR_AUTHOR")
     payload = {
         "repo": repo,
         "pr_number": int(pr_number),
@@ -744,6 +745,7 @@ def call_gate_api(config):
         "estimated_hours": config.get("estimated_hours", 1.0),
         "region": config.get("region", "us-east-1"),
         "api_key": org_api_key,
+        **({"pr_author": pr_author} if pr_author else {}),
     }
 
     output(
