@@ -17,6 +17,9 @@ jobs:
     name: Check Carbon Emissions
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Run Carbon Gate
         uses: ./ # Uses the action in this repo
         with:
