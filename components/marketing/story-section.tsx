@@ -44,7 +44,12 @@ function Chapter({ children, opacity, y, className }: ChapterProps) {
   return (
     <motion.div
       className={`pointer-events-none sticky top-0 flex min-h-screen flex-col items-center justify-center px-4 ${className || ""}`}
-      style={{ opacity, y }}
+      style={{
+        opacity,
+        y,
+        maskImage: "linear-gradient(to bottom, transparent 0%, black 14%, black 100%)",
+        WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 14%, black 100%)",
+      }}
     >
       {children}
     </motion.div>
@@ -62,7 +67,7 @@ export function StorySection() {
 
   // Each chapter: fade-in over ~4% → hold for ~18% → fade-out/fly-up over ~5%
   // Section is 600vh so 1% ≈ 6vh — each chapter gets ~150vh of readable screen.
-  const EXIT_Y = reducedMotion ? 0 : -300;
+  const EXIT_Y = reducedMotion ? 0 : -600;
 
   const ch1Opacity = useTransform(scrollYProgress, [0, 0.04, 0.22, 0.28], [0, 1, 1, 0]);
   const ch1Y = useTransform(scrollYProgress, [0, 0.04, 0.22, 0.28], [reducedMotion ? 0 : 24, 0, 0, EXIT_Y]);
