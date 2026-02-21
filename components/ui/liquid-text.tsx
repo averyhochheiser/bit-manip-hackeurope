@@ -41,7 +41,7 @@ export function LiquidText({ text, className }: LiquidTextProps) {
     }
 
     return (
-        <motion.div
+        <motion.span
             className={cn("inline-flex flex-wrap gap-x-[0.25em]", className)}
             variants={containerVariants}
             initial="hidden"
@@ -59,6 +59,6 @@ export function LiquidText({ text, className }: LiquidTextProps) {
                     </motion.span>
                 </span>
             ))}
-        </motion.div>
+        </motion.span>
     );
 }

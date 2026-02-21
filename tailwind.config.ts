@@ -10,19 +10,19 @@ const config: Config = {
     extend: {
       colors: {
         canvas: {
-          DEFAULT: "#F5F3F0",
-          raised: "#EDEAE6"
+          DEFAULT: "#FFF8F0", // Floral White
+          raised: "#F7EFE4"
         },
         ink: {
-          DEFAULT: "#3A3A38",
-          muted: "#8A8885",
-          faint: "#B5B3B0"
+          DEFAULT: "#002A32", // Jet Black
+          muted: "#2F5157",
+          faint: "#5D767A"
         },
         stoneware: {
-          turquoise: "#98D2EB",
+          turquoise: "#98D2EB", // Sky Blue Light
           pink: "#C4A4A7",
-          green: "#69995D",
-          bordeaux: "#533745"
+          green: "#69995D",     // Sage Green
+          bordeaux: "#533745"   // Mauve Shadow
         },
         border: {
           subtle: "#E0DDD9",

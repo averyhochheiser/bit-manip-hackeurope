@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { motion, useSpring } from "framer-motion";
 
-export function CustomCursor() {
+export function CustomCursor({ size = "h-8 w-8" }: { size?: string }) {
     const [mounted, setMounted] = useState(false);
 
     // Use springs for smooth following
@@ -15,9 +15,9 @@ export function CustomCursor() {
         setMounted(true);
 
         const moveCursor = (e: MouseEvent) => {
-            // Offset by half width/height (16px) to center the 32x32 circle on cursor tip
-            cursorX.set(e.clientX - 16);
-            cursorY.set(e.clientY - 16);
+            // Center the cursor
+            cursorX.set(e.clientX);
+            cursorY.set(e.clientY);
         };
 
         window.addEventListener("mousemove", moveCursor);
@@ -28,10 +28,12 @@ export function CustomCursor() {
 
     return (
         <motion.div
-            className="pointer-events-none fixed left-0 top-0 z-[2147483647] h-8 w-8 rounded-full bg-white mix-blend-difference"
+            className={`pointer-events-none fixed left-0 top-0 z-[2147483647] rounded-full bg-white mix-blend-difference ${size}`}
             style={{
                 x: cursorX,
                 y: cursorY,
+                translateX: "-50%",
+                translateY: "-50%",
                 // Ensure it's accelerated and painted
                 willChange: "transform",
                 backfaceVisibility: "hidden"
