@@ -5,6 +5,7 @@ import { Footer } from "@/components/marketing/footer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getOrgLeaderboard } from "@/lib/leaderboard/queries";
 import { getGlobalDashboardPreview } from "@/lib/dashboard/queries";
+import { getUserDashboardData } from "@/lib/dashboard/github-data";
 import { Trophy, Zap, LogOut } from "lucide-react";
 import Link from "next/link";
 // Note: /leaderboard links use <a> tags because the typed-routes cache doesn't include the new page yet
@@ -14,9 +15,14 @@ export default async function MarketingPage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Show top 5 orgs on the marketing page leaderboard teaser
+  const githubUsername = user?.user_metadata?.user_name ?? "";
+
   const [topOrgs, dashboardData] = await Promise.all([
     getOrgLeaderboard().then(r => r.slice(0, 5)).catch(() => []),
-    getGlobalDashboardPreview(),
+    // When logged in, show the user's real GitHub repos; otherwise show global data / mock
+    githubUsername
+      ? getUserDashboardData(githubUsername).catch(() => getGlobalDashboardPreview())
+      : getGlobalDashboardPreview(),
   ]);
 
   return (

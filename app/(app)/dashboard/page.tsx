@@ -7,6 +7,7 @@ import { KpiStrip } from "@/components/dashboard/kpi-strip";
 import { OverageBillingCard } from "@/components/dashboard/overage-billing-card";
 import { RepoBreakdown } from "@/components/dashboard/repo-breakdown";
 import { getDashboardReadModel, getContributorRepos } from "@/lib/dashboard/queries";
+import { getUserDashboardData } from "@/lib/dashboard/github-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { ensureBillingProfile } from "@/lib/billing/provision";
@@ -47,16 +48,38 @@ export default async function DashboardPage() {
 
   const userName: string = user.user_metadata?.user_name ?? user.user_metadata?.name ?? user.email ?? "";
   const userAvatarUrl: string = user.user_metadata?.avatar_url ?? "";
+  const githubUsername: string = user.user_metadata?.user_name ?? "";
 
-  const [model, contributorRepos] = await Promise.all([
+  // Fetch org gate data + real GitHub repos + cross-org contributions in parallel
+  const [model, githubData, contributorRepos] = await Promise.all([
     getDashboardReadModel(profile.org_id),
-    getContributorRepos(user.user_metadata?.user_name ?? ""),
+    githubUsername
+      ? getUserDashboardData(githubUsername, profile.org_id).catch(() => null)
+      : Promise.resolve(null),
+    getContributorRepos(githubUsername),
   ]);
 
-  const hasData = model.gateEvents.length > 0;
+  // Merge: prefer org gate data when it exists; enrich with GitHub repo info
+  const hasGateData = model.gateEvents.length > 0;
+  const hasGithubRepos = (githubData?.githubRepos?.length ?? 0) > 0;
 
-  // Repos shown in the org section already — exclude from contributor view
+  // Use org gate data as primary, but fall back to GitHub-enriched data
+  const displayModel = hasGateData ? model : (githubData ?? model);
+
+  // Build repo list: org gate repos + GitHub-fetched repos (deduplicated)
   const orgRepoNames = new Set(model.repoReports.map((r) => r.repo));
+  const allRepoReports = [...model.repoReports];
+
+  // Add GitHub repos that aren't already in gate data
+  if (githubData?.repoReports) {
+    for (const ghRepo of githubData.repoReports) {
+      if (!orgRepoNames.has(ghRepo.repo)) {
+        allRepoReports.push(ghRepo);
+        orgRepoNames.add(ghRepo.repo);
+      }
+    }
+  }
+
   const externalContribRepos = contributorRepos.filter((r) => !orgRepoNames.has(r.repo));
 
   return (
@@ -67,7 +90,22 @@ export default async function DashboardPage() {
       userAvatarUrl={userAvatarUrl}
     >
       <div className="space-y-4">
-        <KpiStrip kpis={model.kpis} />
+        <KpiStrip kpis={displayModel.kpis} />
+
+        {/* GitHub repos (owned + contributed) */}
+        {allRepoReports.length > 0 && (
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-floral/40">Your repositories</p>
+              {hasGithubRepos && (
+                <span className="rounded-full bg-sage/[0.08] border border-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage">
+                  {allRepoReports.length} repos
+                </span>
+              )}
+            </div>
+            <RepoBreakdown reports={allRepoReports} />
+          </div>
+        )}
 
         {externalContribRepos.length > 0 && (
           /* ── Repos this user contributed to (other orgs) ── */
@@ -80,7 +118,7 @@ export default async function DashboardPage() {
           </div>
         )}
 
-        {!hasData ? (
+        {!hasGateData && !hasGithubRepos ? (
           /* ── Onboarding empty state ── */
           <div className="space-y-4">
             <div className="panel p-8">
@@ -154,25 +192,24 @@ export default async function DashboardPage() {
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
             <div className="xl:col-span-8">
               <CarbonBudgetProgressBar
-                usedKg={model.budget.usedKg}
-                budgetKg={model.budget.includedKg}
-                projectedKg={model.budget.projectedKg}
+                usedKg={displayModel.budget.usedKg}
+                budgetKg={displayModel.budget.includedKg}
+                projectedKg={displayModel.budget.projectedKg}
               />
             </div>
             <div className="xl:col-span-4">
               <OverageBillingCard
-                includedKg={model.budget.includedKg}
-                usedKg={model.budget.usedKg}
-                unitPrice={model.billing.unitPrice}
+                includedKg={displayModel.budget.includedKg}
+                usedKg={displayModel.budget.usedKg}
+                unitPrice={displayModel.billing.unitPrice}
               />
             </div>
-            <div className="xl:col-span-12">
-              <RepoBreakdown reports={model.repoReports} />
-            </div>
-            <div className="xl:col-span-7">
-              <GateHistoryTable events={model.gateEvents} />
-            </div>
-            <div className="xl:col-span-5">
+            {displayModel.gateEvents.length > 0 && (
+              <div className="xl:col-span-7">
+                <GateHistoryTable events={displayModel.gateEvents} />
+              </div>
+            )}
+            <div className={displayModel.gateEvents.length > 0 ? "xl:col-span-5" : "xl:col-span-12"}>
               <ForecastCard />
             </div>
           </section>

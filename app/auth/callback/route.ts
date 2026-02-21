@@ -12,11 +12,14 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     return NextResponse.redirect(new URL("/?error=auth_callback_failed", request.url));
   }
+
+  // Capture the GitHub OAuth provider token so we can call the GitHub API later
+  const providerToken = sessionData?.session?.provider_token ?? null;
 
   const {
     data: { user }
@@ -30,9 +33,21 @@ export async function GET(request: Request) {
       });
     } catch (err) {
       console.error("[auth/callback] ensureBillingProfile failed:", err);
-      // Don't block sign-in if billing provisioning fails
     }
   }
 
-  return NextResponse.redirect(new URL(next, request.url));
+  const response = NextResponse.redirect(new URL(next, request.url));
+
+  // Store the GitHub token as an httpOnly cookie for subsequent server-side API calls
+  if (providerToken) {
+    response.cookies.set("gh_token", providerToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 8, // 8 hours (matches GitHub OAuth token lifetime)
+    });
+  }
+
+  return response;
 }
