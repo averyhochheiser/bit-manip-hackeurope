@@ -24,6 +24,7 @@ Other tools just measure. **We enforce.**
 
 - ✅ Real carbon overage billing (Stripe metered billing)
 - ✅ Mirrors EU CBAM carbon credit markets
+- ✅ Admin-only overrides prevent unauthorized bypass of billing
 - ✅ Advanced thermodynamic PUE modeling (not flat 1.1 assumptions)
 - ✅ Fourier forecasting for optimal training windows
 - ✅ Direct Crusoe API integration for immediate rerouting
@@ -74,6 +75,7 @@ jobs:
 ### 3. Add Repository Secrets
 
 In Settings → Secrets → Actions:
+
 - `CARBON_GATE_ORG_KEY` - Get from [carbon-gate.vercel.app](https://carbon-gate.vercel.app)
 
 ### 4. Open a PR
@@ -124,15 +126,15 @@ This mirrors **EU CBAM** (Carbon Border Adjustment Mechanism) — companies alre
 
 ## 🏗️ Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
+| Component     | Technology                |
+| ------------- | ------------------------- |
 | GitHub Action | Python (composite action) |
-| Backend API | Next.js (Vercel) |
-| Database | Supabase (Postgres) |
-| Billing | Stripe Metered Billing |
-| Carbon Data | Electricity Maps API |
-| Clean Compute | Crusoe API |
-| Calculations | Custom physics models |
+| Backend API   | Next.js (Vercel)          |
+| Database      | Supabase (Postgres)       |
+| Billing       | Stripe Metered Billing    |
+| Carbon Data   | Electricity Maps API      |
+| Clean Compute | Crusoe API                |
+| Calculations  | Custom physics models     |
 
 ---
 
@@ -157,8 +159,6 @@ This is a hackathon project split across 4 people:
 - **Person 3** - Backend API + Crusoe/Electricity Maps integration
 - **Person 4** - Frontend dashboard + Stripe billing
 
-See [PERSON1_README.md](PERSON1_README.md) for Person 1's detailed docs.
-
 ---
 
 ## 📁 Repository Structure
@@ -168,13 +168,14 @@ bit-manip-hackeurope/
 ├── action.yml                    # GitHub Action definition
 ├── gate_check.py                 # Main Python script
 ├── requirements.txt              # Python dependencies
-├── carbon-gate.yml               # Example config
+├── carbon-gate.yml               # Your config
+├── carbon-gate.example.yml       # Example config
 ├── .github/
 │   └── workflows/
 │       └── carbon-gate.yml       # Workflow that triggers action
 ├── demo/
-│   └── train_model.py            # Demo ML training script
-├── PERSON1_README.md             # Person 1 detailed docs
+│   ├── train_model.py            # Demo ML training script
+│   └── README.md                 # Demo documentation
 └── README.md                     # This file
 ```
 
@@ -200,6 +201,7 @@ For the pitch, we'll:
 The action calls `POST /api/gate/check`:
 
 **Request:**
+
 ```json
 {
   "repo": "myorg/myrepo",
@@ -211,6 +213,7 @@ The action calls `POST /api/gate/check`:
 ```
 
 **Response:**
+
 ```json
 {
   "emissions_kg": 3.2,
@@ -274,4 +277,4 @@ This is a hackathon project built in 30 hours. Contributions welcome after the e
 
 **Built with ❤️ and ⚡ for a sustainable future**
 
-*Track: Crusoe Sustainability | Prize: €1,000 | HackEurope 2026*
+_Track: Crusoe Sustainability | Prize: €1,000 | HackEurope 2026_

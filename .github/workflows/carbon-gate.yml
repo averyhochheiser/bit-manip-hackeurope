@@ -4,8 +4,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - '**.py'
-      - 'carbon-gate.yml'
+      - "**.py"
+      - "carbon-gate.yml"
 
 permissions:
   pull-requests: write
@@ -15,10 +15,13 @@ jobs:
   carbon-gate:
     runs-on: ubuntu-latest
     name: Check Carbon Emissions
-    
+
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Run Carbon Gate
-        uses: ./  # Uses the action in this repo
+        uses: ./ # Uses the action in this repo
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           api-endpoint: ${{ secrets.CARBON_GATE_API_ENDPOINT || 'https://carbon-gate.vercel.app' }}

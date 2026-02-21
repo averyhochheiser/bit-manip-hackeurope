@@ -1,0 +1,66 @@
+# Carbon Gate Configuration - Enhanced Security Example
+# This example shows all available security options
+
+carbon-gate:
+  # GPU configuration
+  gpu: A100
+  estimated_hours: 4.0
+  region: us-east-1
+
+  # Emission thresholds
+  threshold_kg_co2: 2.0 # Block if emissions exceed this
+  warn_kg_co2: 1.0 # Warn if emissions exceed this
+  suggest_crusoe: true
+
+  # 🔒 Enhanced Security Configuration
+  security:
+    # Minimum permission level required to override the gate
+    # Options: 'admin' (most secure), 'maintain', 'write'
+    override_permission: admin
+
+    # Require users to provide justification when overriding
+    # Format: '/crusoe-run: reason here' or comment after adding label
+    require_justification: true
+
+    # Specific GitHub teams allowed to override (optional)
+    # Team members can override regardless of individual permission level
+    # Leave empty [] to use permission level only
+    # Example: ['ml-leads', 'infrastructure-team', 'devops']
+    allowed_teams: []
+
+    # Maximum number of overrides per user per month
+    # Set to 0 for unlimited (not recommended for production)
+    # Helps prevent abuse and encourages sustainable practices
+    max_overrides_per_month: 5
+
+    # Send notifications when override attempts occur
+    # Useful for maintaining audit trail and visibility
+    notify_on_override: true
+
+# Configuration Examples for Different Use Cases:
+#
+# Startup / Small Team (fewer than 10 people):
+#   override_permission: maintain
+#   require_justification: true
+#   allowed_teams: []
+#   max_overrides_per_month: 10
+#
+# Medium Team (10-50 people):
+#   override_permission: admin
+#   require_justification: true
+#   allowed_teams: ['ml-team-leads']
+#   max_overrides_per_month: 5
+#
+# Enterprise (50+ people):
+#   override_permission: admin
+#   require_justification: true
+#   allowed_teams: ['ml-platform-team', 'infrastructure']
+#   max_overrides_per_month: 3
+#   notify_on_override: true
+#
+# Development / Testing:
+#   override_permission: write
+#   require_justification: false
+#   allowed_teams: []
+#   max_overrides_per_month: 0
+#   notify_on_override: false
