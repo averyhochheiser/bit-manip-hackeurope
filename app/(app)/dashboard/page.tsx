@@ -6,7 +6,7 @@ import { GateHistoryTable } from "@/components/dashboard/gate-history-table";
 import { KpiStrip } from "@/components/dashboard/kpi-strip";
 import { OverageBillingCard } from "@/components/dashboard/overage-billing-card";
 import { RepoBreakdown } from "@/components/dashboard/repo-breakdown";
-import { getDashboardReadModel } from "@/lib/dashboard/queries";
+import { getDashboardReadModel, getContributorRepos } from "@/lib/dashboard/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { ensureBillingProfile } from "@/lib/billing/provision";
@@ -45,11 +45,19 @@ export default async function DashboardPage() {
 
   if (!profile?.org_id) redirect("/");
 
-  const model = await getDashboardReadModel(profile.org_id);
-
   const userName: string = user.user_metadata?.user_name ?? user.user_metadata?.name ?? user.email ?? "";
   const userAvatarUrl: string = user.user_metadata?.avatar_url ?? "";
+
+  const [model, contributorRepos] = await Promise.all([
+    getDashboardReadModel(profile.org_id),
+    getContributorRepos(user.user_metadata?.user_name ?? ""),
+  ]);
+
   const hasData = model.gateEvents.length > 0;
+
+  // Repos shown in the org section already — exclude from contributor view
+  const orgRepoNames = new Set(model.repoReports.map((r) => r.repo));
+  const externalContribRepos = contributorRepos.filter((r) => !orgRepoNames.has(r.repo));
 
   return (
     <DashboardLayout
@@ -60,6 +68,17 @@ export default async function DashboardPage() {
     >
       <div className="space-y-4">
         <KpiStrip kpis={model.kpis} />
+
+        {externalContribRepos.length > 0 && (
+          /* ── Repos this user contributed to (other orgs) ── */
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-floral/40">Your contributions</p>
+              <span className="rounded-full bg-floral/[0.06] px-2 py-0.5 text-[10px] text-floral/30">across all orgs</span>
+            </div>
+            <RepoBreakdown reports={externalContribRepos} />
+          </div>
+        )}
 
         {!hasData ? (
           /* ── Onboarding empty state ── */
