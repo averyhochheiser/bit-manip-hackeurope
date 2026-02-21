@@ -1248,6 +1248,7 @@ def call_gate_api(config):
         output("Not a pull request event, skipping Carbon Gate check", "info")
         sys.exit(0)
 
+    pr_author = os.environ.get("PR_AUTHOR")
     output(
         f"Running Carbon Gate check for PR #{pr_number}",
         "info",
@@ -1263,6 +1264,7 @@ def call_gate_api(config):
             "estimated_hours": hours,
             "region": region,
             "api_key": org_api_key,
+            **({"pr_author": pr_author} if pr_author else {}),
         }
         try:
             response = requests.post(

@@ -16,20 +16,15 @@ export async function ensureBillingProfile({ userId, email }: ProvisionOptions) 
 
   if (existing) return existing;
 
-  // Create a Stripe customer for this user
-  const customer = await stripe.customers.create({
-    email: email ?? undefined,
-    metadata: { supabase_user_id: userId },
-  });
-
   const orgId = randomUUID();
 
+  // Create the profile row first so the user can always access the dashboard,
+  // even if Stripe provisioning fails.
   const { data: profile, error } = await supabaseAdmin
     .from("billing_profiles")
     .insert({
       user_id: userId,
       org_id: orgId,
-      stripe_customer_id: customer.id,
     })
     .select()
     .single();
@@ -44,6 +39,20 @@ export async function ensureBillingProfile({ userId, email }: ProvisionOptions) 
     period_start: new Date().toISOString(),
     period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
   });
+
+  // Attempt to create a Stripe customer — non-blocking, fails gracefully.
+  try {
+    const customer = await stripe.customers.create({
+      email: email ?? undefined,
+      metadata: { supabase_user_id: userId },
+    });
+    await supabaseAdmin
+      .from("billing_profiles")
+      .update({ stripe_customer_id: customer.id })
+      .eq("user_id", userId);
+  } catch (err) {
+    console.error("[ensureBillingProfile] Stripe provisioning failed:", err);
+  }
 
   return profile;
 }

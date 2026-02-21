@@ -1,32 +1,21 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 import { GitBranch, Users, Building2, Plus, Trash2 } from "lucide-react";
 
 type SettingsPanelProps = {
   defaultBudgetKg: number;
   warningPct: number;
+  repos?: string[];
 };
 
-const MOCK_REPO_POLICIES = [
-  { repo: "acme-corp/ml-training", budgetKg: 30, warningPct: 75, team: "ML Platform" },
-  { repo: "acme-corp/data-pipeline", budgetKg: 15, warningPct: 70, team: "Data Eng" },
-  { repo: "acme-corp/model-serving", budgetKg: 10, warningPct: 80, team: "Infra" },
-];
-
-const MOCK_TEAMS = [
-  { name: "ML Platform", members: 6, budgetKg: 50 },
-  { name: "Data Eng", members: 4, budgetKg: 25 },
-  { name: "Infra", members: 3, budgetKg: 15 },
-];
-
-export function SettingsPanel({ defaultBudgetKg, warningPct }: SettingsPanelProps) {
+export function SettingsPanel({ defaultBudgetKg, warningPct, repos = [] }: SettingsPanelProps) {
   const [budgetKg, setBudgetKg] = useState(defaultBudgetKg);
   const [warning, setWarning] = useState(warningPct);
   const [status, setStatus] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"org" | "repos" | "teams">("org");
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: { preventDefault(): void }) {
     event.preventDefault();
     setStatus("Saving...");
     const response = await fetch("/api/usage/ingest", {
@@ -135,43 +124,50 @@ export function SettingsPanel({ defaultBudgetKg, warningPct }: SettingsPanelProp
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs text-floral/50">Per-repo overrides apply on top of the org budget.</p>
-            <button className="inline-flex items-center gap-1.5 rounded-lg border border-sage/35 bg-sage/10 px-3 py-1.5 text-xs font-medium text-sage transition hover:bg-sage/20">
-              <Plus size={12} />
-              Connect repo
-            </button>
           </div>
-          {MOCK_REPO_POLICIES.map((r) => (
-            <div key={r.repo} className="panel-muted flex flex-wrap items-center gap-4 p-4">
-              <div className="min-w-0 flex-1">
-                <p className="font-monoData text-sm text-floral">{r.repo}</p>
-                <p className="mt-0.5 text-xs text-floral/45">Team: {r.team}</p>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-floral/65">
-                <label className="flex flex-col gap-1">
-                  <span className="text-floral/45">Budget (kg)</span>
-                  <input
-                    type="number"
-                    defaultValue={r.budgetKg}
-                    className="w-20 rounded-md border border-floral/15 bg-gate-bg/80 px-2 py-1 font-monoData text-floral outline-none focus:ring-1 focus:ring-crusoe/50"
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-floral/45">Warn %</span>
-                  <input
-                    type="number"
-                    defaultValue={r.warningPct}
-                    className="w-16 rounded-md border border-floral/15 bg-gate-bg/80 px-2 py-1 font-monoData text-floral outline-none focus:ring-1 focus:ring-crusoe/50"
-                  />
-                </label>
-                <button className="mt-4 rounded-md p-1 text-floral/30 transition hover:text-mauve/70">
-                  <Trash2 size={14} />
-                </button>
-              </div>
+          {repos.length === 0 ? (
+            <div className="rounded-xl border border-floral/[0.06] bg-floral/[0.02] py-10 text-center">
+              <p className="text-sm text-floral/40">No repositories have run gate checks yet.</p>
+              <p className="mt-1 text-xs text-floral/30">
+                Repos will appear here automatically once the GitHub Action runs.
+              </p>
             </div>
-          ))}
-          <button className="mt-2 w-full rounded-lg border border-floral/10 py-2.5 text-sm text-floral/40 transition hover:border-floral/20 hover:text-floral/65">
-            Save repo policies
-          </button>
+          ) : (
+            repos.map((repo) => (
+              <div key={repo} className="panel-muted flex flex-wrap items-center gap-4 p-4">
+                <div className="min-w-0 flex-1">
+                  <p className="font-monoData text-sm text-floral">{repo}</p>
+                  <p className="mt-0.5 text-xs text-floral/45">Connected via GitHub Action</p>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-floral/65">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-floral/45">Budget (kg)</span>
+                    <input
+                      type="number"
+                      defaultValue={10}
+                      className="w-20 rounded-md border border-floral/15 bg-gate-bg/80 px-2 py-1 font-monoData text-floral outline-none focus:ring-1 focus:ring-crusoe/50"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-floral/45">Warn %</span>
+                    <input
+                      type="number"
+                      defaultValue={80}
+                      className="w-16 rounded-md border border-floral/15 bg-gate-bg/80 px-2 py-1 font-monoData text-floral outline-none focus:ring-1 focus:ring-crusoe/50"
+                    />
+                  </label>
+                  <button className="mt-4 rounded-md p-1 text-floral/30 transition hover:text-mauve/70">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+          {repos.length > 0 && (
+            <button className="mt-2 w-full rounded-lg border border-floral/10 py-2.5 text-sm text-floral/40 transition hover:border-floral/20 hover:text-floral/65">
+              Save repo policies
+            </button>
+          )}
         </div>
       )}
 
@@ -185,30 +181,12 @@ export function SettingsPanel({ defaultBudgetKg, warningPct }: SettingsPanelProp
               Add team
             </button>
           </div>
-          {MOCK_TEAMS.map((team) => (
-            <div key={team.name} className="panel-muted flex flex-wrap items-center gap-4 p-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-floral">{team.name}</p>
-                <p className="mt-0.5 text-xs text-floral/45">{team.members} members</p>
-              </div>
-              <div className="flex items-center gap-3 text-xs">
-                <label className="flex flex-col gap-1">
-                  <span className="text-floral/45">Monthly budget (kg)</span>
-                  <input
-                    type="number"
-                    defaultValue={team.budgetKg}
-                    className="w-24 rounded-md border border-floral/15 bg-gate-bg/80 px-2 py-1 font-monoData text-floral outline-none focus:ring-1 focus:ring-crusoe/50"
-                  />
-                </label>
-                <button className="mt-4 rounded-md p-1 text-floral/30 transition hover:text-mauve/70">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
-          <p className="pt-2 text-xs text-floral/35">
-            Coming soon: invite members by GitHub login and assign per-user overrides.
-          </p>
+          <div className="rounded-xl border border-floral/[0.06] bg-floral/[0.02] py-10 text-center">
+            <p className="text-sm text-floral/40">No teams configured yet.</p>
+            <p className="mt-1 text-xs text-floral/30">
+              Coming soon: invite members by GitHub login and assign per-user overrides.
+            </p>
+          </div>
         </div>
       )}
     </section>
