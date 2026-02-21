@@ -35,7 +35,7 @@ runs:
     - name: Install dependencies
       shell: bash
       run: |
-        pip install requests pyyaml
+        pip install requests pyyaml numpy scipy
 
     - name: Run Carbon Gate check
       shell: bash
