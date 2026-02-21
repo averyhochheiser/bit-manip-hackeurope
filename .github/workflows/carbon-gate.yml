@@ -26,3 +26,4 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           api-endpoint: ${{ secrets.CARBON_GATE_API_ENDPOINT || 'https://carbon-gate.vercel.app' }}
           org-api-key: ${{ secrets.CARBON_GATE_ORG_KEY }}
+          crusoe-api-key: ${{ secrets.CRUSOE_API_KEY }}

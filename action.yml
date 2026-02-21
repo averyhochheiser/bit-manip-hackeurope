@@ -16,6 +16,10 @@ inputs:
   org-api-key:
     description: "Organization API key for Carbon Gate"
     required: true
+  crusoe-api-key:
+    description: "Crusoe Cloud API key for AI-powered carbon-efficiency code suggestions"
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -39,6 +43,7 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         API_ENDPOINT: ${{ inputs.api-endpoint }}
         ORG_API_KEY: ${{ inputs.org-api-key }}
+        CRUSOE_API_KEY: ${{ inputs.crusoe-api-key }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_SHA: ${{ github.sha }}
