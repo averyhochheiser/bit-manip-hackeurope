@@ -338,31 +338,37 @@ export function Hero() {
         </div>
 
         {/* Bottom feature pills — Infinite Marquee */}
-        <div className="relative flex w-full overflow-hidden pb-10">
+        <div
+          className="relative flex w-full overflow-hidden pb-10"
+          style={{
+            maskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)',
+            WebkitMaskImage: 'linear-gradient(to right, transparent, black 25%, black 75%, transparent)'
+          }}
+        >
           <motion.div
             animate={{
-              x: [0, -1000],
+              x: [0, -1200],
             }}
             transition={{
-              duration: 25,
+              duration: 20,
               repeat: Infinity,
               ease: "linear",
             }}
-            className="flex flex-nowrap items-center gap-6 text-[11px] uppercase tracking-[0.14em] text-floral/50 whitespace-nowrap"
+            className="flex flex-nowrap items-center gap-10 text-[11px] uppercase tracking-[0.14em] text-floral/40 whitespace-nowrap"
           >
             {/* Group of 3 (Repeated for infinite effect) */}
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="flex gap-6">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
-                  <Shield size={10} />
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex gap-10">
+                <span className="inline-flex items-center gap-2 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
+                  <Shield size={10} className="text-sage" />
                   Per-repo budgets
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
-                  <BarChart3 size={10} />
+                <span className="inline-flex items-center gap-2 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
+                  <BarChart3 size={10} className="text-sage" />
                   EU CBAM aligned
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
-                  <Zap size={10} />
+                <span className="inline-flex items-center gap-2 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
+                  <Zap size={10} className="text-sage" />
                   Fourier carbon forecasting
                 </span>
               </div>

@@ -8,7 +8,7 @@ import Link from "next/link";
 
 export default function MarketingPage() {
   return (
-    <main className="relative min-h-screen bg-[#23282E]">
+    <main className="relative min-h-screen bg-[#23282E] overflow-x-hidden">
       <header className="fixed inset-x-0 top-0 z-50 border-b border-white/[0.05] bg-[#23282E]/80 backdrop-blur-xl transition-all duration-300">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 sm:px-8 lg:px-12">
           <div className="flex items-center gap-4">

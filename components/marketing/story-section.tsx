@@ -37,15 +37,14 @@ type ChapterProps = {
   children: React.ReactNode;
   opacity: ReturnType<typeof useTransform<number, number>>;
   y: ReturnType<typeof useTransform<number, number>>;
-  x: ReturnType<typeof useTransform<number, number>>;
   className?: string;
 };
 
-function Chapter({ children, opacity, y, x, className }: ChapterProps) {
+function Chapter({ children, opacity, y, className }: ChapterProps) {
   return (
     <motion.div
       className={`pointer-events-none sticky top-0 flex min-h-screen flex-col items-center justify-center px-4 ${className || ""}`}
-      style={{ opacity, y, x }}
+      style={{ opacity, y }}
     >
       {children}
     </motion.div>
@@ -61,21 +60,18 @@ export function StorySection() {
     offset: ["start start", "end end"]
   });
 
-  const ch1Opacity = useTransform(scrollYProgress, [0, 0.05, 0.25, 0.3], [0, 1, 1, 0]);
-  const ch1Y = useTransform(scrollYProgress, [0, 0.05, 0.3], [reducedMotion ? 0 : 20, 0, reducedMotion ? 0 : -20]);
-  const ch1X = useTransform(scrollYProgress, [0, 0.05, 0.3], [reducedMotion ? 0 : 100, 0, reducedMotion ? 0 : -100]);
+  const ch1Opacity = useTransform(scrollYProgress, [0, 0.08, 0.22, 0.3], [0, 1, 1, 0]);
+  const ch1Y = useTransform(scrollYProgress, [0, 0.08, 0.22, 0.3], [reducedMotion ? 0 : 20, 0, 0, reducedMotion ? 0 : -20]);
 
-  const ch2Opacity = useTransform(scrollYProgress, [0.25, 0.32, 0.52, 0.58], [0, 1, 1, 0]);
-  const ch2Y = useTransform(scrollYProgress, [0.25, 0.32, 0.58], [reducedMotion ? 0 : 20, 0, reducedMotion ? 0 : -20]);
-  const ch2X = useTransform(scrollYProgress, [0.25, 0.32, 0.58], [reducedMotion ? 0 : -100, 0, reducedMotion ? 0 : 100]);
+  const ch2Opacity = useTransform(scrollYProgress, [0.25, 0.33, 0.47, 0.55], [0, 1, 1, 0]);
+  const ch2Y = useTransform(scrollYProgress, [0.25, 0.33, 0.47, 0.55], [reducedMotion ? 0 : 20, 0, 0, reducedMotion ? 0 : -20]);
 
-  const ch3Opacity = useTransform(scrollYProgress, [0.5, 0.58, 0.78, 0.84], [0, 1, 1, 0]);
-  const ch3Y = useTransform(scrollYProgress, [0.5, 0.58, 0.84], [reducedMotion ? 0 : 20, 0, reducedMotion ? 0 : -20]);
-  const ch3X = useTransform(scrollYProgress, [0.5, 0.58, 0.84], [reducedMotion ? 0 : 100, 0, reducedMotion ? 0 : -100]);
+  const ch3Opacity = useTransform(scrollYProgress, [0.5, 0.58, 0.72, 0.8], [0, 1, 1, 0]);
+  const ch3Y = useTransform(scrollYProgress, [0.5, 0.58, 0.72, 0.8], [reducedMotion ? 0 : 20, 0, 0, reducedMotion ? 0 : -20]);
 
-  const ch4Opacity = useTransform(scrollYProgress, [0.75, 0.82, 0.98, 1], [0, 1, 1, 0.9]);
-  const ch4Y = useTransform(scrollYProgress, [0.75, 0.82, 1], [reducedMotion ? 0 : 20, 0, 0]);
-  const ch4X = useTransform(scrollYProgress, [0.75, 0.82, 1], [reducedMotion ? 0 : -100, 0, 0]);
+  const ch4Opacity = useTransform(scrollYProgress, [0.75, 0.83, 0.9, 0.95], [0, 1, 1, 0]);
+  const ch4Y = useTransform(scrollYProgress, [0.75, 0.83, 0.9, 0.95], [reducedMotion ? 0 : 20, 0, 0, reducedMotion ? 0 : -20]);
+
 
   const sageBg = useTransform(
     scrollYProgress,
@@ -95,7 +91,7 @@ export function StorySection() {
       </motion.div>
 
       {/* Chapter 1: The Invisible Footprint */}
-      <Chapter opacity={ch1Opacity} y={ch1Y} x={ch1X}>
+      <Chapter opacity={ch1Opacity} y={ch1Y}>
         <p className="mb-4 text-xs uppercase tracking-[0.25em] text-sage">The invisible footprint</p>
         <h2 className="max-w-4xl text-balance text-center font-display text-5xl font-bold leading-[1.1] text-floral sm:text-6xl lg:text-8xl">
           Every training run leaves a trace.
@@ -106,7 +102,7 @@ export function StorySection() {
       </Chapter>
 
       {/* Chapter 2: Physics Over Guesswork */}
-      <Chapter opacity={ch2Opacity} y={ch2Y} x={ch2X}>
+      <Chapter opacity={ch2Opacity} y={ch2Y}>
         <p className="mb-4 text-xs uppercase tracking-[0.25em] text-crusoe">Physics over guesswork</p>
         <h2 className="max-w-4xl text-balance text-center font-display text-5xl font-bold leading-[1.1] text-floral sm:text-6xl lg:text-8xl">
           Standard models guess. We calculate.
@@ -164,7 +160,7 @@ export function StorySection() {
       </Chapter>
 
       {/* Chapter 3: The Solution */}
-      <Chapter opacity={ch3Opacity} y={ch3Y} x={ch3X}>
+      <Chapter opacity={ch3Opacity} y={ch3Y}>
         <p className="mb-4 text-xs uppercase tracking-[0.25em] text-floral/40">The solution</p>
         <h2 className="max-w-4xl text-balance text-center font-display text-5xl font-bold leading-[1.1] text-floral sm:text-6xl lg:text-8xl">
           Harnessing wasted energy for clean compute.
@@ -176,7 +172,7 @@ export function StorySection() {
       </Chapter>
 
       {/* Chapter 4: The Gate */}
-      <Chapter opacity={ch4Opacity} y={ch4Y} x={ch4X}>
+      <Chapter opacity={ch4Opacity} y={ch4Y}>
         <p className="mb-4 text-xs uppercase tracking-[0.25em] text-crusoe">The gate</p>
         <h2 className="max-w-4xl text-balance text-center font-display text-5xl font-bold leading-[1.1] text-floral sm:text-6xl lg:text-8xl">
           Policy enforced on every&nbsp;
