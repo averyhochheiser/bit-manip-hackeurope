@@ -24,6 +24,6 @@ jobs:
         uses: ./ # Uses the action in this repo
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          api-endpoint: ${{ secrets.CARBON_GATE_API_ENDPOINT || 'https://carbon-gate.vercel.app' }}
+          api-endpoint: ${{ secrets.CARBON_GATE_API_ENDPOINT || 'https://bit-manip-hackeurope.vercel.app' }}
           org-api-key: ${{ secrets.CARBON_GATE_ORG_KEY }}
           crusoe-api-key: ${{ secrets.CRUSOE_API_KEY }}
