@@ -165,13 +165,30 @@ The training job runs on **{gpu}** GPUs for approximately **{estimated_hours} h*
 - Removing redundant computations or forward passes
 - Optimizing batch size and gradient accumulation
 
-**Output format:**
-For each file that needs changes, output:
-```
+**CRITICAL - Output format (you MUST follow this exactly):**
+
+For each file that needs changes, use this EXACT format:
+
 === FILENAME: path/to/file.py ===
-[complete refactored code here]
-=== END ===
+```python
+# Complete refactored code here
+import torch
+...
 ```
+=== END ===
+
+**Example:**
+=== FILENAME: train.py ===
+```python
+import torch
+from torch.cuda.amp import autocast, GradScaler
+
+def train():
+    model = MyModel().cuda()
+    scaler = GradScaler()
+    ...
+```
+=== END ===
 
 Only refactor files where you can make meaningful carbon-efficiency improvements.
 
@@ -202,18 +219,58 @@ Provide complete, runnable refactored code."""
         data = response.json()
         content = data["choices"][0]["message"]["content"].strip()
         
+        output(f"Received response from Crusoe AI ({len(content)} chars)", "debug")
+        
+        # Debug: Save response to file if in debug mode
+        if os.environ.get("DEBUG_REFACTOR"):
+            with open("crusoe_refactor_response.txt", "w") as f:
+                f.write(content)
+            output("Saved AI response to crusoe_refactor_response.txt", "debug")
+        
         # Parse the response to extract refactored files
         refactored = {}
-        parts = content.split("=== FILENAME:")
-        for part in parts[1:]:  # Skip first empty part
-            if "=== END ===" in part:
-                header, code_section = part.split("===", 1)
-                filename = header.strip()
-                code = code_section.replace("END ===", "").strip()
-                # Remove markdown code fences if present
-                if code.startswith("```python") or code.startswith("```"):
-                    code = "\n".join(code.split("\n")[1:-1])  # Remove first and last line
-                refactored[filename] = code
+        
+        # Try parsing with the expected format first
+        if "=== FILENAME:" in content and "=== END ===" in content:
+            parts = content.split("=== FILENAME:")
+            for part in parts[1:]:  # Skip first empty part
+                if "=== END ===" in part:
+                    try:
+                        header, code_section = part.split("===", 1)
+                        filename = header.strip()
+                        code = code_section.replace("END ===", "").strip()
+                        
+                        # Remove markdown code fences if present
+                        if code.startswith("```python") or code.startswith("```"):
+                            lines = code.split("\n")
+                            # Remove first line (```python or ```) and last line (```)
+                            if lines[-1].strip() == "```":
+                                code = "\n".join(lines[1:-1])
+                            else:
+                                code = "\n".join(lines[1:])
+                        
+                        if filename and code:
+                            refactored[filename] = code
+                            output(f"Parsed refactored file: {filename} ({len(code)} chars)", "debug")
+                    except Exception as e:
+                        output(f"Error parsing refactored section: {e}", "warn")
+                        continue
+        else:
+            # Fallback: AI might have just returned code without special markers
+            output("AI response doesn't contain expected format markers, attempting fallback parsing", "warn")
+            # Try to extract any Python code blocks
+            if "```python" in content:
+                blocks = content.split("```python")
+                for i, block in enumerate(blocks[1:], 1):
+                    if "```" in block:
+                        code = block.split("```")[0].strip()
+                        if code:
+                            refactored[f"refactored_code_{i}.py"] = code
+                            output(f"Extracted code block {i} ({len(code)} chars)", "debug")
+        
+        if not refactored:
+            output("No refactored code could be extracted from AI response", "warn")
+            output(f"Response preview: {content[:500]}...", "debug")
         
         return refactored if refactored else None
     except Exception as e:
@@ -1047,12 +1104,17 @@ def main():
         file_contents = get_pr_file_contents()
         
         if diff and file_contents:
-            refactored_code = call_crusoe_for_refactoring(diff, config, file_contents)
-            if refactored_code:
-                file_count = len(refactored_code)
-                output(f"Successfully generated refactored code for {file_count} file(s)", "success")
-            else:
-                output("Crusoe refactoring call returned no content, skipping", "warn")
+            try:
+                refactored_code = call_crusoe_for_refactoring(diff, config, file_contents)
+                if refactored_code:
+                    file_count = len(refactored_code)
+                    output(f"Successfully generated refactored code for {file_count} file(s)", "success")
+                    output(f"Files refactored: {', '.join(refactored_code.keys())}", "debug")
+                else:
+                    output("Crusoe refactoring call returned no content, skipping", "warn")
+            except Exception as e:
+                output(f"Error during refactoring: {e}", "error")
+                refactored_code = None
         else:
             output("No Python files to refactor", "info")
 
