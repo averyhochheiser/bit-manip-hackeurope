@@ -1,0 +1,23 @@
+# Carbon Gate Configuration
+# Place this file in the root of your repository
+
+carbon-gate:
+  # GPU type being used for training
+  # Options: A100, H100, V100, A10
+  gpu: A100
+  
+  # Estimated training time in hours
+  estimated_hours: 4.0
+  
+  # Cloud region where training will run
+  # Examples: us-east-1, us-west-2, eu-west-1, eu-central-1
+  region: us-east-1
+  
+  # Block PR if emissions exceed this threshold (in kgCO₂)
+  threshold_kg_co2: 2.0
+  
+  # Warn if emissions exceed this level (in kgCO₂)
+  warn_kg_co2: 1.0
+  
+  # Whether to suggest Crusoe alternative in PR comment
+  suggest_crusoe: true

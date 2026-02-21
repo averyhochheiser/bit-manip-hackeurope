@@ -1,0 +1,25 @@
+name: Carbon Gate Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**.py'
+      - 'carbon-gate.yml'
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  carbon-gate:
+    runs-on: ubuntu-latest
+    name: Check Carbon Emissions
+    
+    steps:
+      - name: Run Carbon Gate
+        uses: ./  # Uses the action in this repo
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          api-endpoint: ${{ secrets.CARBON_GATE_API_ENDPOINT || 'https://carbon-gate.vercel.app' }}
+          org-api-key: ${{ secrets.CARBON_GATE_ORG_KEY }}
