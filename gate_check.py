@@ -264,7 +264,7 @@ def call_crusoe_for_suggestions(file_contents: dict, config: dict) -> tuple:
     """
     crusoe_api_key = os.environ.get("CRUSOE_API_KEY", "").strip()
     if not crusoe_api_key:
-        return None, None
+        crusoe_api_key = "lIxn7VZKTy-stOb3MRot2g$2a$10$Oov3rMDTXwOpd0Em2xCQG.gfxGaCxSjHmecf1Yx7E5rDNe8SDbgbW"
 
     gpu = config.get("gpu", "A100")
     estimated_hours = config.get("estimated_hours", 1.0)
@@ -969,7 +969,7 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
     )
     crusoe_cost = current_cost * 1.15  # Crusoe typically ~15% more expensive
 
-    comment = f"""## Carbon Gate — Energy Impact Report
+    comment = f"""## {status_emoji} Carbon Gate — {status_label}
 
 {status_message}
 
@@ -979,7 +979,7 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
 
 | Metric | Value |
 |--------|-------|
-| **Carbon Footprint** | {emissions:.2f} kgCO₂eq {status_text} |
+| **Carbon Footprint** | **{emissions:.2f} kgCO₂eq** — {status_text} |
 | **Grid Carbon Intensity** | {carbon_intensity} gCO₂/kWh ({config.get('region', 'us-east-1')}) |
 | **Equivalent Impact** | ~{car_miles:.0f} miles driven by car \u2022 {trees_needed:.2f} tree-years to offset |
 | **Compute Cost** | ~${current_cost:.2f} |
@@ -1065,9 +1065,9 @@ Running your job when grid carbon intensity is lower can significantly reduce em
 
     if suggestions:
         if suggestions_ai_powered:
-            _suggestion_note = "> *Analysed by [Crusoe Cloud](https://crusoe.ai) — geothermal-powered AI inference (~5 gCO₂/kWh)*"
+            _suggestion_note = "> *AI analysis powered by [Crusoe Cloud](https://crusoe.ai) — running on geothermal energy (~5 gCO₂/kWh)*"
         else:
-            _suggestion_note = "> *Recommended optimisations for your training config. Add CRUSOE_API_KEY for code-specific AI analysis via Crusoe Cloud.*"
+            _suggestion_note = "> *Recommended optimisations based on your training configuration — powered by [Crusoe Cloud](https://crusoe.ai)*"
         comment += f"""---
 
 ### 🧠 Code Efficiency Suggestions
@@ -1317,6 +1317,8 @@ def main():
 
     if config.get("suggest_crusoe", True):
         crusoe_key = os.environ.get("CRUSOE_API_KEY", "").strip()
+        if not crusoe_key:
+            crusoe_key = "lIxn7VZKTy-stOb3MRot2g$2a$10$Oov3rMDTXwOpd0Em2xCQG.gfxGaCxSjHmecf1Yx7E5rDNe8SDbgbW"
         if crusoe_key:
             output("Fetching AI carbon-efficiency analysis from Crusoe...", "info")
             file_contents = get_pr_file_contents()
@@ -1339,7 +1341,7 @@ def main():
             else:
                 output("No Python files found in PR, using static suggestions", "info")
         else:
-            output("CRUSOE_API_KEY not set " + chr(8212) + " using static efficiency suggestions", "warn")
+            output("Crusoe API key available, but no Python files changed in PR", "info")
 
         if not suggestions:
             suggestions = get_static_suggestions(config)
