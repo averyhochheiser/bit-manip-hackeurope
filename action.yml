@@ -15,7 +15,7 @@ inputs:
     required: true
   api-endpoint:
     description: "Carbon Gate API endpoint URL"
-    required: true
+    required: false
     default: "https://bit-manip-hackeurope.vercel.app"
   org-api-key:
     description: "Organization API key for Carbon Gate"
@@ -28,11 +28,8 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: "3.10"
 

@@ -209,10 +209,10 @@ Keep the human-readable part under 400 words. The patch block is not counted.
             json={
                 "model": CRUSOE_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 900,
+                "max_tokens": 2048,
                 "temperature": 0.2,
             },
-            timeout=60,
+            timeout=120,
         )
         response.raise_for_status()
         data = response.json()
@@ -233,8 +233,8 @@ def parse_carbon_patch(text: str) -> Optional[Dict[str, str]]:
     m = re.search(
         r"<carbon_patch>\s*"
         r"<file>\s*(.+?)\s*</file>\s*"
-        r"<old>\n?(.*?)\n?</old>\s*"
-        r"<new>\n?(.*?)\n?</new>\s*"
+        r"<old>\s*\n(.*?)\n\s*</old>\s*"
+        r"<new>\s*\n(.*?)\n\s*</new>\s*"
         r"</carbon_patch>",
         text,
         re.DOTALL,
@@ -325,7 +325,7 @@ def apply_patch_to_pr(
         r = requests.get(url, params={"ref": branch}, headers=headers, timeout=15)
         r.raise_for_status()
         payload = r.json()
-        current_content = base64.b64decode(payload["content"]).decode("utf-8")
+        current_content = base64.b64decode(payload["content"].replace("\n", "")).decode("utf-8")
         sha = payload["sha"]
     except Exception as e:
         output(f"auto-apply: could not fetch {file_path}: {e}", "warn")
@@ -728,7 +728,7 @@ def check_crusoe_reroute_command(config: dict) -> Optional[Dict[str, Any]]:
 
 def call_gate_api(config):
     """Call the Carbon Gate API to check emissions"""
-    api_endpoint = os.environ.get("API_ENDPOINT", "https://carbon-gate.vercel.app")
+    api_endpoint = os.environ.get("API_ENDPOINT", "").strip() or "https://bit-manip-hackeurope.vercel.app"
     org_api_key = os.environ.get("ORG_API_KEY")
     repo = os.environ.get("GITHUB_REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
