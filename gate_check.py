@@ -278,6 +278,57 @@ Provide complete, runnable refactored code."""
         return None
 
 
+def get_static_suggestions(config: dict) -> str:
+    """
+    Return hardcoded carbon-efficiency tips based on job config.
+    Fallback when CRUSOE_API_KEY is absent or the API call fails.
+    """
+    gpu = config.get("gpu", "A100")
+    hours = config.get("estimated_hours", 1.0)
+
+    tips = [
+        (
+            "**Enable mixed-precision training**",
+            "Wrap your training loop with `torch.autocast('cuda')`. "
+            "This typically halves GPU memory and speeds up compute by 1.5–3×, "
+            "directly cutting energy consumption.\n\n"
+            "```python\n"
+            "from torch.cuda.amp import autocast, GradScaler\n"
+            "scaler = GradScaler()\n"
+            "with autocast():\n"
+            "    loss = model(batch)\n"
+            "scaler.scale(loss).backward()\n"
+            "scaler.step(optimizer)\n"
+            "scaler.update()\n"
+            "```",
+        ),
+        (
+            "**Add early stopping**",
+            f"With {hours:.0f}h estimated runtime on {gpu}, training to completion "
+            "wastes compute if validation loss has plateaued. "
+            "Add patience-based early stopping (patience=3–5 epochs).",
+        ),
+        (
+            "**Optimise data loading**",
+            "Use `num_workers >= 4` and `pin_memory=True` on your DataLoader:\n\n"
+            "```python\n"
+            "DataLoader(ds, batch_size=64, num_workers=4, pin_memory=True, prefetch_factor=2)\n"
+            "```",
+        ),
+        (
+            "**Enable gradient checkpointing**",
+            "Allows larger batches and reduces total training time:\n\n"
+            "```python\n"
+            "model.gradient_checkpointing_enable()  # HuggingFace\n"
+            "# or: torch.utils.checkpoint.checkpoint(module, *inputs)\n"
+            "```",
+        ),
+    ]
+
+    return "\n\n".join(
+        f"{i}. {title}  \n   {body}" for i, (title, body) in enumerate(tips, 1)
+    )
+
 def call_crusoe_for_suggestions(diff: str, config: dict) -> Optional[str]:
     """
     Send the PR diff to Crusoe's LLM and return Markdown suggestions for
@@ -730,7 +781,7 @@ def call_gate_api(config):
         }
 
 
-def format_pr_comment(config, result, suggestions: Optional[str] = None, refactored_code: Optional[dict] = None):
+def format_pr_comment(config, result, suggestions: Optional[str] = None, refactored_code: Optional[dict] = None, suggestions_ai_powered: bool = True):
     """Format the Carbon Gate report as a PR comment with educational, firm tone"""
     emissions = result["emissions_kg"]
     crusoe_emissions = result["crusoe_emissions_kg"]
@@ -872,11 +923,15 @@ Running your job when grid carbon intensity is lower can significantly reduce em
 """
 
     if suggestions:
+        if suggestions_ai_powered:
+            _suggestion_note = "> *Analysed by [Crusoe Cloud](https://crusoe.ai) — geothermal-powered AI inference (~5 gCO₂/kWh)*"
+        else:
+            _suggestion_note = "> *Recommended optimisations for your training config. Add CRUSOE_API_KEY for code-specific AI analysis via Crusoe Cloud.*"
         comment += f"""---
 
-### AI Code Efficiency Analysis
+### 🧠 Code Efficiency Suggestions
 
-> *Analysed by [Crusoe Cloud](https://crusoe.ai) — geothermal-powered AI inference (~5 gCO₂/kWh)*
+{_suggestion_note}
 
 {suggestions}
 
@@ -1090,23 +1145,29 @@ def main():
     suggestions = None
     refactored_code = None
     
-    if (
-        config.get("suggest_crusoe", True)
-        and os.environ.get("CRUSOE_API_KEY", "").strip()
-    ):
-        output("Fetching AI carbon-efficiency suggestions from Crusoe...", "info")
-        diff = get_pr_diff()
-        if diff:
-            suggestions = call_crusoe_for_suggestions(diff, config)
-            if suggestions:
-                output("AI suggestions generated successfully", "success")
+    suggestions_ai_powered = False
+    if config.get("suggest_crusoe", True):
+        crusoe_key = os.environ.get("CRUSOE_API_KEY", "").strip()
+        if crusoe_key:
+            output("Fetching AI carbon-efficiency suggestions from Crusoe...", "info")
+            diff = get_pr_diff()
+            if diff:
+                suggestions = call_crusoe_for_suggestions(diff, config)
+                if suggestions:
+                    suggestions_ai_powered = True
+                    output("AI suggestions generated successfully", "success")
+                else:
+                    output("Crusoe API returned no content, using static suggestions", "warn")
             else:
-                output("Crusoe suggestion call returned no content, skipping", "warn")
+                output("No Python file changes found in PR diff, using static suggestions", "info")
         else:
-            output(
-                "No Python file changes found in PR diff, skipping AI suggestions",
-                "info",
-            )
+            output("CRUSOE_API_KEY not set — using static efficiency suggestions", "warn")
+
+        if not suggestions:
+            suggestions = get_static_suggestions(config)
+            output("Using static carbon-efficiency suggestions", "info")
+    else:
+        output("AI suggestions disabled (suggest_crusoe: false in config)", "info")
 
     # Generate refactored code for high-emission PRs (opt-in via auto_refactor config)
     status = result.get("status", "pass")
@@ -1135,7 +1196,7 @@ def main():
             output("No Python files to refactor", "info")
 
     # Format and post PR comment
-    comment = format_pr_comment(config, result, suggestions, refactored_code)
+    comment = format_pr_comment(config, result, suggestions, refactored_code, suggestions_ai_powered)
     post_pr_comment(comment)
 
     # Check if gate should block
