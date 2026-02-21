@@ -3,7 +3,9 @@ import { HowItWorks } from "@/components/marketing/how-it-works";
 import { DashboardPreview } from "@/components/marketing/dashboard-preview";
 import { Footer } from "@/components/marketing/footer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getOrgLeaderboard } from "@/lib/leaderboard/queries";
+import { getContributorLeaderboard } from "@/lib/leaderboard/queries";
+import { getGlobalDashboardPreview } from "@/lib/dashboard/queries";
+import { getUserDashboardData } from "@/lib/dashboard/github-data";
 import { Trophy, Zap, LogOut } from "lucide-react";
 import Link from "next/link";
 // Note: /leaderboard links use <a> tags because the typed-routes cache doesn't include the new page yet
@@ -12,8 +14,16 @@ export default async function MarketingPage() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Show top 5 orgs on the marketing page leaderboard teaser
-  const topOrgs = await getOrgLeaderboard().then(r => r.slice(0, 5)).catch(() => []);
+  // Show top 5 contributors on the marketing page leaderboard teaser
+  const githubUsername = user?.user_metadata?.user_name ?? "";
+
+  const [topContributors, dashboardData] = await Promise.all([
+    getContributorLeaderboard().then(r => r.slice(0, 5)).catch(() => []),
+    // When logged in, show the user's real GitHub repos; otherwise show global data / mock
+    githubUsername
+      ? getUserDashboardData(githubUsername).catch(() => getGlobalDashboardPreview())
+      : getGlobalDashboardPreview(),
+  ]);
 
   return (
     <main className="relative min-h-screen bg-[#23282E] overflow-x-hidden">
@@ -91,7 +101,7 @@ export default async function MarketingPage() {
 
         {/* Dashboard preview */}
         <div className="relative mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
-          <DashboardPreview />
+          <DashboardPreview data={dashboardData} />
         </div>
 
         {/* Leaderboard teaser */}
@@ -119,7 +129,7 @@ export default async function MarketingPage() {
             </a>
           </div>
 
-          {topOrgs.length === 0 ? (
+          {topContributors.length === 0 ? (
             <div className="panel flex flex-col items-center gap-3 py-16 text-center">
               <Trophy size={32} className="text-floral/15" />
               <p className="text-sm text-floral/40">Be the first team on the board.</p>
@@ -132,7 +142,7 @@ export default async function MarketingPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {topOrgs.map((entry, i) => {
+              {topContributors.map((entry, i) => {
                 const medal = i === 0 ? "text-yellow-400" : i === 1 ? "text-floral/50" : i === 2 ? "text-amber-600/70" : "text-floral/20";
                 return (
                   <div key={entry.name} className="panel-muted flex items-center gap-4 rounded-xl p-4">

@@ -25,6 +25,8 @@ import { supabaseAdmin }         from "@/lib/supabase/admin";
 import { getCarbonIntensity }    from "@/lib/electricity-maps/client";
 import { getCrusoeAvailability } from "@/lib/crusoe/client";
 import { estimateEmissions }     from "@/lib/carbon/calculator";
+import { stripe }                from "@/lib/stripe";
+import { getTier, calculateOverage, csrdSummary } from "@/lib/billing/eu-tiers";
 
 // ── Request / response types ─────────────────────────────────────────────────
 
@@ -90,8 +92,8 @@ export async function POST(request: Request) {
   // ── 3. Fetch real-time carbon intensity ────────────────────────────────
   const carbonIntensity = await getCarbonIntensity(region);
 
-  // ── 4. Fetch org carbon budget ─────────────────────────────────────────
-  const [{ data: budget }, { data: usage }] = await Promise.all([
+  // ── 4. Fetch org billing profile + carbon budget ────────────────────
+  const [{ data: budget }, { data: usage }, { data: billingProfile }] = await Promise.all([
     supabaseAdmin
       .from("carbon_budget")
       .select("included_kg, warning_pct")
@@ -104,9 +106,15 @@ export async function POST(request: Request) {
       .select("used_kg")
       .eq("org_id", orgId)
       .maybeSingle(),
+    supabaseAdmin
+      .from("billing_profiles")
+      .select("tier, stripe_customer_id, stripe_subscription_item_id")
+      .eq("org_id", orgId)
+      .maybeSingle(),
   ]);
 
-  const includedKg = budget?.included_kg ?? 50;
+  const tier = getTier(billingProfile?.tier);
+  const includedKg = budget?.included_kg ?? tier.includedKg;
   const usedKg     = usage?.used_kg      ?? 0;
 
   // ── 5. Crusoe availability ─────────────────────────────────────────────
@@ -144,8 +152,58 @@ export async function POST(request: Request) {
     status:               result.gate.legacyStatus,
     crusoe_available:     crusoe.available,
     crusoe_instance:      crusoe.recommendedModel,
-    contributor:          pr_author ?? null,
+    ...(pr_author ? { contributor: pr_author } : {}),
   });
+
+  // ── 7b. Report metered usage to Stripe ─────────────────────────────────
+  // Only for paid tiers with a valid subscription item.
+  const meterEventName = process.env.STRIPE_METER_EVENT_NAME;
+  if (
+    billingProfile?.stripe_customer_id &&
+    meterEventName &&
+    tier.overagePerKgCents > 0
+  ) {
+    try {
+      await stripe.billing.meterEvents.create({
+        event_name: meterEventName,
+        payload: {
+          stripe_customer_id: billingProfile.stripe_customer_id,
+          // Value is in grams (integer) for precision — Stripe needs whole numbers
+          value: String(Math.round(result.emissionsKg * 1000)),
+        },
+      });
+    } catch (err) {
+      // Non-blocking — don't fail the gate check if metering fails
+      console.error("[gate/check] Stripe meter event failed:", err);
+    }
+  }
+
+  // ── 7c. Hard cap enforcement (EU Taxonomy DNSH) ────────────────────────
+  const newTotalKg = usedKg + result.emissionsKg;
+  const overage = calculateOverage(tier, newTotalKg);
+  const isHardBlocked = tier.hardCapKg > 0 && newTotalKg >= tier.hardCapKg;
+
+  // Override the gate decision if hard-capped
+  const finalStatus = isHardBlocked ? "block" : result.gate.legacyStatus;
+  const finalGate = isHardBlocked
+    ? {
+        status: "hard_block" as const,
+        message: `❌ Hard cap reached (${tier.hardCapKg} kgCO₂e). Upgrade to Pro for metered overage at EU ETS rate.`,
+        overage_kg: overage.overageKg,
+        overage_fraction: overage.utilizationPct / 100,
+        resolution_options: [
+          "Upgrade plan at /settings",
+          "Wait for next billing cycle",
+          "Reroute to Crusoe (lower carbon)",
+        ],
+      }
+    : {
+        status:             result.gate.status,
+        message:            result.gate.message,
+        overage_kg:         result.gate.overageKg,
+        overage_fraction:   result.gate.overageFraction,
+        resolution_options: result.gate.resolutionOptions,
+      };
 
   // ── 8. Return enriched response ────────────────────────────────────────
   return NextResponse.json({
@@ -160,15 +218,25 @@ export async function POST(request: Request) {
     // Budget
     budget_remaining_kg:   Math.round(budgetRemainingKg * 100) / 100,
 
-    // Gate decision (graduated)
-    status:                result.gate.legacyStatus,   // backward compat for Action
-    gate: {
-      status:              result.gate.status,
-      message:             result.gate.message,
-      overage_kg:          result.gate.overageKg,
-      overage_fraction:    result.gate.overageFraction,
-      resolution_options:  result.gate.resolutionOptions,
+    // Gate decision (graduated, respects hard cap)
+    status:                finalStatus,
+    gate:                  finalGate,
+
+    // Billing context
+    billing: {
+      tier:                tier.id,
+      tier_name:           tier.name,
+      included_kg:         tier.includedKg,
+      hard_cap_kg:         tier.hardCapKg > 0 ? tier.hardCapKg : null,
+      overage_rate_usd:    `$${(tier.overagePerKgCents / 100).toFixed(3)}/kgCO₂e`,
+      current_overage:     overage.overageFormatted,
+      utilization_pct:     overage.utilizationPct,
+      ets_equivalent:      `$${(overage.etsEquivalentCents / 100).toFixed(2)}`,
+      regulatory_note:     tier.regulatoryNote,
     },
+
+    // CSRD reporting data (Scope 3)
+    csrd: tier.csrdReporting ? csrdSummary(newTotalKg) : null,
 
     // Forecast
     optimal_window:        result.optimalWindowHours > 0

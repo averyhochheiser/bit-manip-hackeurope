@@ -101,10 +101,14 @@ export async function getDashboardReadModel(orgId: string): Promise<DashboardRea
       repoMap.set(ev.repo, entry);
     });
 
+    // Proportional budget: split org budget across repos weighted by usage
+    const activeCount = Math.max(1, repoMap.size);
+    const repoBudgets = allocateRepoBudgets(includedKg, repoMap, activeCount);
+
     const repoReports: RepoReport[] = Array.from(repoMap.entries()).map(([name, stats]) => ({
       repo: name,
       usedKg: round1(stats.used),
-      budgetKg: 10.0,
+      budgetKg: round1(repoBudgets.get(name) ?? (includedKg / activeCount)),
       topContributor: "PR Author",
       totalGatesRun: stats.count,
     }));
@@ -124,35 +128,16 @@ export async function getDashboardReadModel(orgId: string): Promise<DashboardRea
 
 /**
  * Repos the given GitHub username appears in as a PR author (contributor),
- * across *all* orgs — not just their own. Used to surface open-source /
- * cross-org repos on the dashboard.
+ * across *all* orgs — not just their own. Uses repo names from the GitHub
+ * API since the gate_events table doesn't yet have a contributor column.
+ *
+ * NOTE: This is now largely superseded by getUserDashboardData() which
+ * does repo-name-based lookups. Kept for backward compat on the dashboard.
  */
 export async function getContributorRepos(githubUsername: string): Promise<RepoReport[]> {
-  if (!githubUsername) return [];
-
-  const { data } = await supabaseAdmin
-    .from("gate_events")
-    .select("repo, emissions_kg, status, contributor")
-    .eq("contributor", githubUsername)
-    .order("created_at", { ascending: false });
-
-  if (!data || data.length === 0) return [];
-
-  const repoMap = new Map<string, { used: number; count: number }>();
-  for (const row of data) {
-    const entry = repoMap.get(row.repo) ?? { used: 0, count: 0 };
-    entry.used += row.emissions_kg ?? 0;
-    entry.count += 1;
-    repoMap.set(row.repo, entry);
-  }
-
-  return Array.from(repoMap.entries()).map(([name, stats]) => ({
-    repo: name,
-    usedKg: round1(stats.used),
-    budgetKg: 10.0,
-    topContributor: githubUsername,
-    totalGatesRun: stats.count,
-  }));
+  // The contributor column doesn't exist yet — return empty.
+  // Cross-org data is surfaced by getUserDashboardData() via repo-name lookup.
+  return [];
 }
 
 /** Derive the unique repos that have run gate checks for this org. */
@@ -168,5 +153,150 @@ export async function getOrgRepos(orgId: string): Promise<string[]> {
   return unique;
 }
 
+/**
+ * Global aggregate across ALL orgs — powers the marketing page preview.
+ * Falls back to MOCK_DASHBOARD when no real gate events exist yet.
+ */
+export async function getGlobalDashboardPreview(): Promise<DashboardReadModel> {
+  try {
+    const { data: rawEvents } = await supabaseAdmin
+      .from("gate_events")
+      .select(
+        "id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at"
+      )
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (!rawEvents || rawEvents.length === 0) {
+      // No live data yet — show mock so the preview isn't blank
+      const { MOCK_DASHBOARD } = await import("./mock-data");
+      return MOCK_DASHBOARD;
+    }
+
+    const gateEvents: GateEventRow[] = rawEvents.map((r: GateEventDbRow) => ({
+      id: r.id,
+      prNumber: r.pr_number,
+      repo: r.repo,
+      branch: "—",
+      kgCO2e: r.emissions_kg,
+      status: r.status === "pass" ? "Passed" as const : "Rerouted to Crusoe" as const,
+      emittedAt: r.created_at,
+    }));
+
+    const totalEmissions = gateEvents.reduce((s, e) => s + e.kgCO2e, 0);
+    const crusoeSavings = gateEvents
+      .filter((e) => e.status === "Rerouted to Crusoe")
+      .reduce((s, e) => s + e.kgCO2e * 0.88, 0);
+    const reroutedCount = gateEvents.filter((e) => e.status === "Rerouted to Crusoe").length;
+    const uniqueRepos = new Set(gateEvents.map((e) => e.repo));
+
+    const kpis: KpiItem[] = [
+      {
+        label: "Emissions this month",
+        value: `${round1(totalEmissions)} kgCO₂eq`,
+        delta: `across ${uniqueRepos.size} repos`,
+        deltaPositive: false,
+      },
+      {
+        label: "Gates triggered",
+        value: String(gateEvents.length),
+        delta: `${reroutedCount} rerouted to Crusoe`,
+        deltaPositive: false,
+      },
+      {
+        label: "Crusoe saves",
+        value: `${round1(crusoeSavings)} kgCO₂eq`,
+        delta: "if rerouted",
+        deltaPositive: true,
+      },
+      {
+        label: "Carbon overage cost",
+        value: "$0.00",
+        delta: "within budget",
+        deltaPositive: true,
+      },
+    ];
+
+    const budgetKg = 50;
+    const projectedKg = (() => {
+      const day = new Date().getDate();
+      return day > 0 ? (totalEmissions / day) * 30 : totalEmissions;
+    })();
+
+    // Repo-level aggregation
+    const repoMap = new Map<string, { used: number; count: number }>();
+    gateEvents.forEach((ev) => {
+      const entry = repoMap.get(ev.repo) || { used: 0, count: 0 };
+      entry.used += ev.kgCO2e;
+      entry.count += 1;
+      repoMap.set(ev.repo, entry);
+    });
+
+    const globalBudgets = allocateRepoBudgets(budgetKg, repoMap, Math.max(1, repoMap.size));
+
+    const repoReports: RepoReport[] = Array.from(repoMap.entries()).map(([name, stats]) => ({
+      repo: name,
+      usedKg: round1(stats.used),
+      budgetKg: round1(globalBudgets.get(name) ?? (budgetKg / Math.max(1, repoMap.size))),
+      topContributor: "PR Author",
+      totalGatesRun: stats.count,
+    }));
+
+    return {
+      kpis,
+      budget: {
+        usedKg: round1(totalEmissions),
+        includedKg: budgetKg,
+        projectedKg: round1(projectedKg),
+        warningPct: 80,
+      },
+      billing: {
+        unitPrice: 2.0,
+        estimatedOverageKg: round2(Math.max(0, totalEmissions - budgetKg)),
+        estimatedCharge: round2(Math.max(0, (totalEmissions - budgetKg) * 2.0)),
+      },
+      gateEvents: gateEvents.slice(0, 5),
+      repoReports,
+    };
+  } catch (err) {
+    console.error("[dashboard] global preview failed, using mock:", err);
+    const { MOCK_DASHBOARD } = await import("./mock-data");
+    return MOCK_DASHBOARD;
+  }
+}
+
 function round1(n: number) { return Math.round(n * 10) / 10; }
 function round2(n: number) { return Math.round(n * 100) / 100; }
+
+/**
+ * Distributes the org's total carbon budget across repos, weighted by usage.
+ */
+function allocateRepoBudgets(
+  orgBudgetKg: number,
+  usageByRepo: Map<string, { used: number; count: number }>,
+  totalRepoCount: number,
+): Map<string, number> {
+  const budgets = new Map<string, number>();
+  const totalUsed = Array.from(usageByRepo.values()).reduce((s, v) => s + v.used, 0);
+  const minSlice = orgBudgetKg / Math.max(1, totalRepoCount) * 0.1;
+
+  if (totalUsed <= 0 || usageByRepo.size === 0) {
+    return budgets;
+  }
+
+  let allocated = 0;
+  for (const [repo, stats] of usageByRepo) {
+    const share = Math.max(minSlice, (stats.used / totalUsed) * orgBudgetKg);
+    budgets.set(repo, share);
+    allocated += share;
+  }
+
+  if (allocated > orgBudgetKg * 1.01) {
+    const scale = orgBudgetKg / allocated;
+    for (const [repo, val] of budgets) {
+      budgets.set(repo, val * scale);
+    }
+  }
+
+  return budgets;
+}
