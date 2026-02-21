@@ -454,51 +454,82 @@ Be thorough. Do not limit yourself.
 {files_section}
 """
 
-    try:
-        response = requests.post(
-            f"{CRUSOE_API_BASE}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {crusoe_api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": CRUSOE_MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 4096,
-                "temperature": 0.3,
-            },
-            timeout=120,
-        )
-        response.raise_for_status()
-        data = response.json()
-        raw = data["choices"][0]["message"]["content"].strip()
+    messages = [{"role": "user", "content": prompt}]
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app").rstrip("/")
+    org_api_key = os.environ.get("ORG_API_KEY", "").strip()
 
-        # Split into suggestions and patch
-        suggestions = None
-        patch = None
+    raw = None
 
-        # Extract suggestions section
-        sug_match = re.search(r'## Suggestions\s*\n(.*?)(?=## Patch|$)', raw, re.DOTALL)
-        if sug_match:
-            suggestions = sug_match.group(1).strip()
+    # Try direct Crusoe API first
+    if crusoe_api_key:
+        try:
+            response = requests.post(
+                f"{CRUSOE_API_BASE}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {crusoe_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": CRUSOE_MODEL,
+                    "messages": messages,
+                    "max_tokens": 4096,
+                    "temperature": 0.3,
+                },
+                timeout=120,
+            )
+            response.raise_for_status()
+            data = response.json()
+            raw = data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            output(f"Direct Crusoe AI call failed: {e}", "warn")
 
-        # Extract patch from code fence
-        patch_match = re.search(r'```diff\n(.*?)```', raw, re.DOTALL)
-        if patch_match:
-            candidate = patch_match.group(1).strip()
-            if '--- a/' in candidate:
-                patch = candidate
-            else:
-                output("Patch block found but doesn't look like a unified diff", "warn")
+    # Fall back to proxy if direct call failed or key not set
+    if raw is None and org_api_key:
+        output("Using Carbon Gate proxy for Crusoe AI...", "info")
+        try:
+            response = requests.post(
+                f"{api_endpoint}/api/crusoe/chat",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "org_api_key": org_api_key,
+                    "messages": messages,
+                    "max_tokens": 4096,
+                    "temperature": 0.3,
+                },
+                timeout=120,
+            )
+            response.raise_for_status()
+            data = response.json()
+            raw = data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            output(f"Proxy Crusoe AI call failed: {e}", "warn")
 
-        if not suggestions:
-            # fallback: return the whole response as suggestions
-            suggestions = raw
-
-        return suggestions, patch
-    except Exception as e:
-        output(f"Crusoe AI call failed: {e}", "warn")
+    if raw is None:
         return None, None
+
+    # Split into suggestions and patch
+    suggestions = None
+    patch = None
+
+    # Extract suggestions section
+    sug_match = re.search(r'## Suggestions\s*\n(.*?)(?=## Patch|$)', raw, re.DOTALL)
+    if sug_match:
+        suggestions = sug_match.group(1).strip()
+
+    # Extract patch from code fence
+    patch_match = re.search(r'```diff\n(.*?)```', raw, re.DOTALL)
+    if patch_match:
+        candidate = patch_match.group(1).strip()
+        if '--- a/' in candidate:
+            patch = candidate
+        else:
+            output("Patch block found but doesn't look like a unified diff", "warn")
+
+    if not suggestions:
+        # fallback: return the whole response as suggestions
+        suggestions = raw
+
+    return suggestions, patch
 
 
 
@@ -699,9 +730,8 @@ def run_patch_apply_mode(config: dict):
 
     output("Generating Crusoe AI optimizations...", "info")
     crusoe_api_key = os.environ.get("CRUSOE_API_KEY", "").strip()
-    if not crusoe_api_key:
-        _post_reply("\u274c `CRUSOE_API_KEY` is not set. Cannot generate AI optimizations.")
-        return
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app").rstrip("/")
+    org_api_key = os.environ.get("ORG_API_KEY", "").strip()
 
     gpu = config.get("gpu", "A100")
     estimated_hours = config.get("estimated_hours", 1.0)
@@ -738,27 +768,59 @@ Focus on:
 
 Return the complete optimized files now:"""
 
-    try:
-        response = requests.post(
-            f"{CRUSOE_API_BASE}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {crusoe_api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": CRUSOE_MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 4096,
-                "temperature": 0.2,
-            },
-            timeout=120,
+    messages = [{"role": "user", "content": prompt}]
+
+    # Try direct Crusoe API first, fall back to proxy (so client repos don't need CRUSOE_API_KEY)
+    ai_text = None
+    if crusoe_api_key:
+        output("Using direct Crusoe API (CRUSOE_API_KEY set)", "info")
+        try:
+            response = requests.post(
+                f"{CRUSOE_API_BASE}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {crusoe_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": CRUSOE_MODEL,
+                    "messages": messages,
+                    "max_tokens": 4096,
+                    "temperature": 0.2,
+                },
+                timeout=120,
+            )
+            response.raise_for_status()
+            data = response.json()
+            ai_text = data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            output(f"Direct Crusoe API call failed: {e}", "warn")
+
+    if ai_text is None and org_api_key:
+        output("Falling back to Carbon Gate proxy for Crusoe AI...", "info")
+        try:
+            response = requests.post(
+                f"{api_endpoint}/api/crusoe/chat",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "org_api_key": org_api_key,
+                    "messages": messages,
+                    "max_tokens": 4096,
+                    "temperature": 0.2,
+                },
+                timeout=120,
+            )
+            response.raise_for_status()
+            data = response.json()
+            ai_text = data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            output(f"Proxy Crusoe AI call failed: {e}", "warn")
+
+    if ai_text is None:
+        _post_reply(
+            "\u274c Could not reach Crusoe AI. "
+            "Ensure `CRUSOE_API_KEY` is set in this repo's secrets, "
+            "or `CARBON_GATE_ORG_KEY` is set to use the proxy."
         )
-        response.raise_for_status()
-        data = response.json()
-        ai_text = data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        output(f"Crusoe AI call failed: {{e}}", "warn")
-        _post_reply(f"\u274c Crusoe AI call failed: {{e}}. Please try again later.")
         return
 
     # Parse the response into filename -> optimized content
@@ -1725,7 +1787,8 @@ def main():
 
     if config.get("suggest_crusoe", True):
         crusoe_key = os.environ.get("CRUSOE_API_KEY", "").strip()
-        if crusoe_key:
+        org_key = os.environ.get("ORG_API_KEY", "").strip()
+        if crusoe_key or org_key:
             output("Fetching AI carbon-efficiency analysis from Crusoe...", "info")
             file_contents = get_pr_file_contents()
             if file_contents:
@@ -1741,7 +1804,7 @@ def main():
             else:
                 output("No Python files found in PR, using static suggestions", "info")
         else:
-            output("Crusoe API key available, but no Python files changed in PR", "info")
+            output("No Python files changed in PR, skipping AI analysis", "info")
 
         if not suggestions:
             suggestions = get_static_suggestions(config)
