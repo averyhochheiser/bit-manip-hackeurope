@@ -95,7 +95,21 @@ CRUSOE_MODEL = "NVFP4/Qwen3-235B-A22B-Instruct-2507-FP4"
 def call_crusoe_for_suggestions(diff: str, config: dict) -> Optional[str]:
     """
     Send the PR diff to Crusoe's LLM and return Markdown suggestions for
-    making the training code more carbon-efficient.
+    making the training code more carbon-efficient, plus a machine-readable
+    <carbon_patch> block for the single highest-impact change.
+
+    Patch format embedded in the response:
+
+        <carbon_patch>
+        <file>path/to/file.py</file>
+        <old>
+        exact original code to replace
+        </old>
+        <new>
+        replacement code
+        </new>
+        </carbon_patch>
+
     Returns None if CRUSOE_API_KEY is absent or the call fails.
     """
     crusoe_api_key = os.environ.get("CRUSOE_API_KEY", "").strip()
@@ -111,23 +125,35 @@ The training job is configured to run on **{gpu}** GPUs for approximately **{est
 
 Analyse the following code changes and provide:
 1. **2–3 specific, actionable suggestions** to reduce compute time and energy consumption.
-2. **A short refactored code snippet** for the single most impactful suggestion (where applicable).
+2. For the **single most impactful suggestion**, include a machine-readable patch block at the
+   END of your response using this exact format (no extra whitespace inside tags):
+
+<carbon_patch>
+<file>exact/relative/path/to/file.py</file>
+<old>
+exact lines from the file as they currently appear — must match verbatim so a
+string-replacement can be applied safely
+</old>
+<new>
+improved replacement code
+</new>
+</carbon_patch>
 
 Focus on concrete patterns such as:
-- Redundant forward/backward passes or unnecessary re-computation
 - Missing mixed-precision (`torch.autocast`) or gradient checkpointing
 - Inefficient data loading (blocking I/O, no `pin_memory`, `num_workers=0`)
-- Suboptimal batch-size / learning-rate schedule choices
+- Redundant forward/backward passes or unnecessary re-computation
 - Unnecessary CPU↔GPU transfers or `.item()` calls inside training loops
 - Early stopping absent when validation loss plateaus
-- Model architecture over-parameterisation for the stated task
+- Suboptimal batch-size / learning-rate schedule choices
 
-Be specific to the actual code shown. Skip generic advice that doesn't apply.
+Be specific to the actual code shown. If no safe single-file patch can be
+produced, omit the <carbon_patch> block entirely rather than guessing.
+
+Keep the human-readable part under 400 words. The patch block is not counted.
 
 ## Changed Python files
-{diff}
-
-Respond in Markdown only. Keep the total response under 450 words."""
+{diff}"""
 
     try:
         response = requests.post(
@@ -139,8 +165,8 @@ Respond in Markdown only. Keep the total response under 450 words."""
             json={
                 "model": CRUSOE_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 700,
-                "temperature": 0.3,
+                "max_tokens": 900,
+                "temperature": 0.2,
             },
             timeout=60,
         )
@@ -150,6 +176,151 @@ Respond in Markdown only. Keep the total response under 450 words."""
     except Exception as e:
         output(f"Crusoe suggestion call failed: {e}", "warn")
         return None
+
+
+# ── Auto-apply helpers ────────────────────────────────────────────────────────
+
+import re
+import base64
+
+
+def parse_carbon_patch(text: str) -> Optional[Dict[str, str]]:
+    """
+    Extract the <carbon_patch> block from the LLM response.
+    Returns {file, old, new} or None.
+    """
+    m = re.search(
+        r"<carbon_patch>\s*"
+        r"<file>\s*(.+?)\s*</file>\s*"
+        r"<old>\n?(.*?)\n?</old>\s*"
+        r"<new>\n?(.*?)\n?</new>\s*"
+        r"</carbon_patch>",
+        text,
+        re.DOTALL,
+    )
+    if not m:
+        return None
+    return {"file": m.group(1).strip(), "old": m.group(2), "new": m.group(3)}
+
+
+def strip_carbon_patch(text: str) -> str:
+    """Remove the machine-readable patch block before posting human-visible comment."""
+    return re.sub(
+        r"\s*<carbon_patch>.*?</carbon_patch>\s*", "\n", text, flags=re.DOTALL
+    ).strip()
+
+
+def get_pr_branch() -> Optional[str]:
+    """Return the head branch name for the current PR."""
+    github_token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    pr_number = os.environ.get("PR_NUMBER")
+    if not github_token or not repo or not pr_number:
+        return None
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        return r.json()["head"]["ref"]
+    except Exception as e:
+        output(f"Could not fetch PR branch: {e}", "warn")
+        return None
+
+
+def apply_patch_to_pr(
+    file_path: str, old_code: str, new_code: str, branch: str
+) -> bool:
+    """
+    Apply a text replacement to a file on the PR branch using the GitHub
+    Contents API, committing the result directly.
+
+    Returns True on success, False on any failure (so callers can fall back
+    gracefully to just posting the suggestion as a comment).
+    """
+    github_token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if not github_token or not repo:
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    # 1. Fetch current file content + SHA
+    url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+    try:
+        r = requests.get(url, params={"ref": branch}, headers=headers, timeout=15)
+        r.raise_for_status()
+        payload = r.json()
+        current_content = base64.b64decode(payload["content"]).decode("utf-8")
+        sha = payload["sha"]
+    except Exception as e:
+        output(f"auto-apply: could not fetch {file_path}: {e}", "warn")
+        return False
+
+    # 2. Verify old code is present verbatim
+    if old_code not in current_content:
+        output(
+            f"auto-apply: patch target not found verbatim in {file_path} — skipping",
+            "warn",
+        )
+        return False
+
+    # 3. Apply replacement
+    new_content = current_content.replace(old_code, new_code, 1)
+    if new_content == current_content:
+        output(f"auto-apply: replacement produced no change in {file_path}", "warn")
+        return False
+
+    # 4. Commit back to the PR branch
+    encoded = base64.b64encode(new_content.encode("utf-8")).decode("ascii")
+    pr_number = os.environ.get("PR_NUMBER", "?")
+    try:
+        put_r = requests.put(
+            url,
+            headers=headers,
+            json={
+                "message": f"chore(carbon-gate): auto-apply efficiency patch [PR #{pr_number}]",
+                "content": encoded,
+                "sha": sha,
+                "branch": branch,
+            },
+            timeout=20,
+        )
+        put_r.raise_for_status()
+        output(f"auto-apply: committed optimised {file_path} to {branch}", "success")
+        return True
+    except Exception as e:
+        output(f"auto-apply: commit failed for {file_path}: {e}", "warn")
+        return False
+
+
+def try_auto_apply(suggestions_text: str) -> bool:
+    """
+    Parse the LLM response for a <carbon_patch> block and, if found,
+    apply it to the PR branch.
+
+    Returns True if a patch was successfully committed.
+    """
+    patch = parse_carbon_patch(suggestions_text)
+    if not patch:
+        output("No auto-apply patch found in Crusoe response", "info")
+        return False
+
+    branch = get_pr_branch()
+    if not branch:
+        output("auto-apply: could not determine PR branch", "warn")
+        return False
+
+    output(
+        f"auto-apply: attempting patch on {patch['file']} (branch: {branch})", "info"
+    )
+    return apply_patch_to_pr(patch["file"], patch["old"], patch["new"], branch)
 
 
 def load_config():
@@ -686,13 +857,15 @@ Running your job when grid carbon intensity is lower can significantly reduce em
 """
 
     if suggestions:
+        # Strip machine-readable patch block before displaying
+        human_suggestions = strip_carbon_patch(suggestions)
         comment += f"""---
 
 ### AI Code Efficiency Analysis
 
 > *Analysed by [Crusoe Cloud](https://crusoe.ai) \u2014 geothermal-powered AI inference (~5\u202fgCO\u2082/kWh)*
 
-{suggestions}
+{human_suggestions}
 
 """
 
@@ -859,6 +1032,7 @@ def main():
 
     # Fetch AI code suggestions from Crusoe (opt-in via suggest_crusoe config + CRUSOE_API_KEY)
     suggestions = None
+    patch_applied = False
     if (
         config.get("suggest_crusoe", True)
         and os.environ.get("CRUSOE_API_KEY", "").strip()
@@ -869,6 +1043,13 @@ def main():
             suggestions = call_crusoe_for_suggestions(diff, config)
             if suggestions:
                 output("AI suggestions generated successfully", "success")
+                # Attempt to auto-apply the highest-impact patch to the PR branch
+                patch_applied = try_auto_apply(suggestions)
+                if patch_applied:
+                    output(
+                        "Efficiency patch committed to PR branch automatically",
+                        "success",
+                    )
             else:
                 output("Crusoe suggestion call returned no content, skipping", "warn")
         else:
@@ -879,6 +1060,17 @@ def main():
 
     # Format and post PR comment
     comment = format_pr_comment(config, result, suggestions)
+    # If a patch was auto-applied, append a brief notice to the comment
+    if patch_applied:
+        patch_info = parse_carbon_patch(suggestions or "")
+        fname = patch_info["file"] if patch_info else "a file"
+        comment += (
+            f"\n---\n\n"
+            f"### ✅ Efficiency Patch Applied Automatically\n\n"
+            f"The highest-impact suggestion above has been committed directly to this "
+            f"PR branch (`{fname}`). "
+            f"Please review the commit, run your tests, and request re-review.\n"
+        )
     post_pr_comment(comment)
 
     # Check if gate should block
