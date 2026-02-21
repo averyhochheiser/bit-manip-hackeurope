@@ -39,9 +39,9 @@ export function DashboardPreview() {
   return (
     <section className="relative py-16 sm:py-20">
       <div className="mb-8">
-        <p className="text-xs uppercase tracking-[0.2em] text-floral/55">Functional Dashboard</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-floral/55">Live dashboard preview</p>
         <h2 className="mt-3 font-display text-3xl font-bold text-floral sm:text-4xl">
-          Live policy enforcement, packaged as signal-rich bento blocks
+          Every repo. Every team. One carbon ledger.
         </h2>
       </div>
 

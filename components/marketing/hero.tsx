@@ -148,7 +148,7 @@ export function Hero() {
               variants={child}
               className="mt-5 max-w-lg font-serif text-base leading-relaxed text-[#23282E]/60 sm:text-lg md:text-xl"
             >
-              Sustainability is now a first-class citizen of CI/CD.
+              One platform to track, enforce, and reduce your organisation&apos;s carbon footprint across every GitHub repo and team.
             </motion.p>
           </div>
 
