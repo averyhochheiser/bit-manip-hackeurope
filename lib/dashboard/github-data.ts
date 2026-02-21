@@ -23,11 +23,12 @@ export async function getUserDashboardData(
   username: string,
   orgId?: string | null
 ): Promise<DashboardReadModel & { githubRepos: GitHubRepo[] }> {
-  // Fetch GitHub repos and gate_events in parallel
-  const [githubRepos, gateResult] = await Promise.all([
-    getAllUserRepos(username),
-    fetchGateEvents(orgId ?? null, username),
-  ]);
+  // 1. Fetch GitHubRepos first (we need the names for the gate query)
+  const githubRepos = await getAllUserRepos(username);
+  const repoNames = githubRepos.map((r) => r.fullName);
+
+  // 2. Fetch gate events scoped to org + any repos the user is connected to
+  const gateResult = await fetchGateEvents(orgId ?? null, repoNames);
 
   const gateEvents = gateResult.events;
   const totalEmissions = gateResult.totalEmissions;
@@ -140,22 +141,27 @@ interface RawGateEvent {
   emissions_kg: number;
   status: string;
   created_at: string;
-  contributor?: string;
 }
 
-async function fetchGateEvents(orgId: string | null, username: string): Promise<GateResult> {
+/**
+ * Fetch gate events via two strategies:
+ *  1. By org_id — covers events from the user's own org
+ *  2. By repo name ∈ user's GitHub repos — covers cross-org contributions
+ *     (e.g. user opened a PR to another org's repo that has Carbon Gate installed)
+ *
+ * Results are merged and deduplicated by event id.
+ */
+async function fetchGateEvents(orgId: string | null, repoNames: string[]): Promise<GateResult> {
   try {
-    // Two queries in parallel:
-    // 1. Events for the user's own org (if they have one)
-    // 2. Events where the user is listed as contributor (cross-org — covers PRs to other orgs' repos)
     const queries: Promise<{ data: RawGateEvent[] | null }>[] = [];
 
+    // Query 1: events belonging to the user's own org
     if (orgId) {
       queries.push(
         (async () => {
           const { data } = await supabaseAdmin
             .from("gate_events")
-            .select("id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at, contributor")
+            .select("id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at")
             .eq("org_id", orgId)
             .order("created_at", { ascending: false })
             .limit(50);
@@ -164,18 +170,28 @@ async function fetchGateEvents(orgId: string | null, username: string): Promise<
       );
     }
 
-    if (username) {
-      queries.push(
-        (async () => {
-          const { data } = await supabaseAdmin
-            .from("gate_events")
-            .select("id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at, contributor")
-            .eq("contributor", username)
-            .order("created_at", { ascending: false })
-            .limit(50);
-          return { data: data as RawGateEvent[] | null };
-        })()
-      );
+    // Query 2: events for repos the user owns/contributes to (cross-org)
+    // Filter out repos already covered by the org query, and batch in groups of 20
+    if (repoNames.length > 0) {
+      // We query all of the user's repos — the org_id query dedup handles overlap
+      const batches: string[][] = [];
+      for (let i = 0; i < repoNames.length; i += 20) {
+        batches.push(repoNames.slice(i, i + 20));
+      }
+
+      for (const batch of batches) {
+        queries.push(
+          (async () => {
+            const { data } = await supabaseAdmin
+              .from("gate_events")
+              .select("id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at")
+              .in("repo", batch)
+              .order("created_at", { ascending: false })
+              .limit(50);
+            return { data: data as RawGateEvent[] | null };
+          })()
+        );
+      }
     }
 
     const results = await Promise.all(queries);
@@ -205,7 +221,7 @@ async function fetchGateEvents(orgId: string | null, username: string): Promise<
       id: r.id,
       prNumber: r.pr_number,
       repo: r.repo,
-      branch: r.contributor ?? "—",
+      branch: "—",
       kgCO2e: r.emissions_kg,
       status: (r.status === "pass" ? "Passed" : "Rerouted to Crusoe") as
         | "Passed"

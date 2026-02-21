@@ -144,7 +144,6 @@ export async function POST(request: Request) {
     status:               result.gate.legacyStatus,
     crusoe_available:     crusoe.available,
     crusoe_instance:      crusoe.recommendedModel,
-    contributor:          pr_author ?? null,
   });
 
   // ── 8. Return enriched response ────────────────────────────────────────

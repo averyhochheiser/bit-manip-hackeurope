@@ -124,35 +124,16 @@ export async function getDashboardReadModel(orgId: string): Promise<DashboardRea
 
 /**
  * Repos the given GitHub username appears in as a PR author (contributor),
- * across *all* orgs — not just their own. Used to surface open-source /
- * cross-org repos on the dashboard.
+ * across *all* orgs — not just their own. Uses repo names from the GitHub
+ * API since the gate_events table doesn't yet have a contributor column.
+ *
+ * NOTE: This is now largely superseded by getUserDashboardData() which
+ * does repo-name-based lookups. Kept for backward compat on the dashboard.
  */
 export async function getContributorRepos(githubUsername: string): Promise<RepoReport[]> {
-  if (!githubUsername) return [];
-
-  const { data } = await supabaseAdmin
-    .from("gate_events")
-    .select("repo, emissions_kg, status, contributor")
-    .eq("contributor", githubUsername)
-    .order("created_at", { ascending: false });
-
-  if (!data || data.length === 0) return [];
-
-  const repoMap = new Map<string, { used: number; count: number }>();
-  for (const row of data) {
-    const entry = repoMap.get(row.repo) ?? { used: 0, count: 0 };
-    entry.used += row.emissions_kg ?? 0;
-    entry.count += 1;
-    repoMap.set(row.repo, entry);
-  }
-
-  return Array.from(repoMap.entries()).map(([name, stats]) => ({
-    repo: name,
-    usedKg: round1(stats.used),
-    budgetKg: 10.0,
-    topContributor: githubUsername,
-    totalGatesRun: stats.count,
-  }));
+  // The contributor column doesn't exist yet — return empty.
+  // Cross-org data is surfaced by getUserDashboardData() via repo-name lookup.
+  return [];
 }
 
 /** Derive the unique repos that have run gate checks for this org. */
@@ -177,7 +158,7 @@ export async function getGlobalDashboardPreview(): Promise<DashboardReadModel> {
     const { data: rawEvents } = await supabaseAdmin
       .from("gate_events")
       .select(
-        "id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at, contributor"
+        "id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at"
       )
       .order("created_at", { ascending: false })
       .limit(50);
@@ -188,11 +169,11 @@ export async function getGlobalDashboardPreview(): Promise<DashboardReadModel> {
       return MOCK_DASHBOARD;
     }
 
-    const gateEvents: GateEventRow[] = rawEvents.map((r: GateEventDbRow & { contributor?: string }) => ({
+    const gateEvents: GateEventRow[] = rawEvents.map((r: GateEventDbRow) => ({
       id: r.id,
       prNumber: r.pr_number,
       repo: r.repo,
-      branch: r.contributor ?? "—",
+      branch: "—",
       kgCO2e: r.emissions_kg,
       status: r.status === "pass" ? "Passed" as const : "Rerouted to Crusoe" as const,
       emittedAt: r.created_at,
