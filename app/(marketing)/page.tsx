@@ -12,7 +12,7 @@ export default function MarketingPage() {
           Carbon Gate
         </p>
         <div className="rounded-full border border-[#FFF8F0]/15 bg-[#FFF8F0]/5 px-3 py-1 text-xs text-[#FFF8F0]/75">
-          GitHub Action + Stripe Metered Billing
+          Multi-repo carbon analytics hub
         </div>
       </header>
 

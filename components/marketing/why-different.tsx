@@ -4,16 +4,16 @@ import { motion } from "framer-motion";
 
 const points = [
   {
-    title: "CI/CD Enforcement, not dashboard theater",
-    copy: "Every PR is evaluated against budget policy and automatically routed by outcome: pass, warn, or reroute."
+    title: "One hub for every repo and team",
+    copy: "Connect all your organisation's GitHub repos. Set individual budgets per repository, per team, or per employee — enforced automatically on every PR."
   },
   {
-    title: "Overage billing tied to measured emissions",
-    copy: "Stripe metered billing maps directly to budget overrun in kgCO2e so finance and engineering share one source of truth."
+    title: "Accountability from code to invoice",
+    copy: "Stripe metered billing maps directly to budget overrun in kgCO₂e so finance and engineering share one source of truth across every connected project."
   },
   {
-    title: "Thermodynamic Advantage",
-    copy: "Dynamic PUE modeling adapts to runtime conditions instead of flat assumptions, producing audit-grade carbon estimates."
+    title: "Physics-grade estimates, not guesses",
+    copy: "Dynamic PUE modeling, GPU thermal throttling, and Fourier grid forecasting give you audit-ready numbers — not marketing-grade assumptions."
   }
 ];
 
@@ -45,13 +45,16 @@ export function WhyDifferent() {
 
       <div className="mt-7 flex flex-wrap gap-3 text-xs uppercase tracking-[0.14em] text-floral/45">
         <span className="rounded-full border border-floral/10 bg-floral/[0.02] px-3 py-1">
-          Radiative Forcing Modeled
+          Per-repo budgets
         </span>
         <span className="rounded-full border border-floral/10 bg-floral/[0.02] px-3 py-1">
-          Embodied Carbon Aware
+          Team &amp; employee thresholds
         </span>
         <span className="rounded-full border border-floral/10 bg-floral/[0.02] px-3 py-1">
-          Fourier Carbon Forecasting
+          EU CBAM aligned reporting
+        </span>
+        <span className="rounded-full border border-floral/10 bg-floral/[0.02] px-3 py-1">
+          Fourier carbon forecasting
         </span>
       </div>
     </section>

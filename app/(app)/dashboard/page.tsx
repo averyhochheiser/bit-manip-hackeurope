@@ -4,6 +4,7 @@ import { ForecastCard } from "@/components/dashboard/forecast-card";
 import { GateHistoryTable } from "@/components/dashboard/gate-history-table";
 import { KpiStrip } from "@/components/dashboard/kpi-strip";
 import { OverageBillingCard } from "@/components/dashboard/overage-billing-card";
+import { RepoBreakdown } from "@/components/dashboard/repo-breakdown";
 import { getDashboardReadModel } from "@/lib/dashboard/queries";
 
 export default async function DashboardPage() {
@@ -11,8 +12,8 @@ export default async function DashboardPage() {
 
   return (
     <DashboardLayout
-      title="Carbon Dashboard"
-      subtitle="CI/CD enforcement for emissions, usage and overage billing in real-time."
+      title="Organisation Overview"
+      subtitle="Company-wide carbon analytics across all connected repositories and teams."
     >
       <div className="space-y-4">
         <KpiStrip kpis={model.kpis} />
@@ -30,6 +31,9 @@ export default async function DashboardPage() {
               usedKg={model.budget.usedKg}
               unitPrice={model.billing.unitPrice}
             />
+          </div>
+          <div className="xl:col-span-12">
+            <RepoBreakdown />
           </div>
           <div className="xl:col-span-7">
             <GateHistoryTable events={model.gateEvents} />
