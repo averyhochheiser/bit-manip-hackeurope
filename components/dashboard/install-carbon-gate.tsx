@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Zap, Check, Loader2, AlertCircle, Key, ExternalLink } from "lucide-react";
+import { Zap, Check, Loader2, AlertCircle, ExternalLink, Key, Copy } from "lucide-react";
 
 type InstallButtonProps = {
   repo: string;
-  orgKey?: string;
 };
 
-export function InstallCarbonGate({ repo, orgKey }: InstallButtonProps) {
+export function InstallCarbonGate({ repo }: InstallButtonProps) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
-  const [showSecrets, setShowSecrets] = useState(false);
+  const [orgApiKey, setOrgApiKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function handleInstall() {
     setState("loading");
@@ -32,10 +32,18 @@ export function InstallCarbonGate({ repo, orgKey }: InstallButtonProps) {
 
       setState("done");
       setMessage(data.message);
-      setShowSecrets(true);
+      if (data.orgApiKey) setOrgApiKey(data.orgApiKey);
     } catch (err) {
       setState("error");
       setMessage(err instanceof Error ? err.message : "Network error");
+    }
+  }
+
+  function handleCopy() {
+    if (orgApiKey) {
+      navigator.clipboard.writeText(orgApiKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   }
 
@@ -44,41 +52,51 @@ export function InstallCarbonGate({ repo, orgKey }: InstallButtonProps) {
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sage">
           <Check size={14} />
-          <span className="text-xs font-semibold">Installed!</span>
+          <span className="text-xs font-semibold">Workflow installed!</span>
         </div>
-        {showSecrets && (
-          <div className="rounded-xl border border-floral/[0.08] bg-floral/[0.02] p-4 space-y-3">
+
+        {orgApiKey && (
+          <div className="rounded-xl border border-floral/[0.08] bg-floral/[0.02] p-4 space-y-2">
             <div className="flex items-center gap-2">
-              <Key size={12} className="text-crusoe/60" />
+              <Key size={12} className="text-sage/60" />
               <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-floral/40">
-                Last step: Add repository secret
+                Add this secret to your repo
               </p>
             </div>
-            <p className="text-xs text-floral/50 leading-relaxed">
-              Go to your repo settings and add this secret so the workflow can authenticate:
+            <p className="text-[11px] text-floral/50 leading-relaxed">
+              The workflow needs a <span className="font-semibold text-floral/70">CARBON_GATE_ORG_KEY</span> secret to authenticate.
             </p>
-            {orgKey && (
-              <div className="flex items-center gap-2 rounded-lg border border-floral/[0.08] bg-black/30 px-3 py-2">
-                <code className="flex-1 font-monoData text-xs text-floral/70">
-                  CARBON_GATE_ORG_KEY={orgKey}
-                </code>
-                <button
-                  onClick={() => navigator.clipboard.writeText(orgKey)}
-                  className="shrink-0 text-[10px] font-bold text-crusoe/60 hover:text-crusoe"
-                >
-                  Copy
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-2 rounded-lg border border-floral/[0.08] bg-black/30 px-3 py-2">
+              <code className="flex-1 font-mono text-xs text-floral/70 select-all">
+                {orgApiKey}
+              </code>
+              <button
+                onClick={handleCopy}
+                className="shrink-0 text-[10px] font-bold text-sage/60 hover:text-sage transition"
+              >
+                {copied ? "Copied!" : <Copy size={12} />}
+              </button>
+            </div>
             <a
-              href={`https://github.com/${repo}/settings/secrets/actions/new`}
+              href={`https://github.com/${repo}/settings/secrets/actions/new?name=CARBON_GATE_ORG_KEY`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-sage hover:text-sage/80 transition"
             >
-              Open GitHub Secrets <ExternalLink size={11} />
+              Add secret on GitHub <ExternalLink size={11} />
             </a>
           </div>
+        )}
+
+        {!orgApiKey && (
+          <a
+            href={`https://github.com/${repo}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-floral/40 hover:text-floral/70 transition"
+          >
+            Open repo <ExternalLink size={10} />
+          </a>
         )}
       </div>
     );

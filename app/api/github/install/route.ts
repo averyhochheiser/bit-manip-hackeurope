@@ -148,7 +148,18 @@ export async function POST(req: Request) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const orgKey = profile?.org_id ?? ""; // org_id doubles as the API key for now
+  if (!profile?.org_id) {
+    return NextResponse.json({ error: "No organisation found. Please complete onboarding first." }, { status: 400 });
+  }
+
+  // Look up the actual API key from org_api_keys
+  const { data: keyRow } = await supabaseAdmin
+    .from("org_api_keys")
+    .select("api_key")
+    .eq("org_id", profile.org_id)
+    .maybeSingle();
+
+  const orgApiKey = keyRow?.api_key ?? "";
 
   // 5. Commit both files
   const results = await Promise.all([
@@ -189,13 +200,12 @@ export async function POST(req: Request) {
   return NextResponse.json({
     message: `Carbon Gate installed on ${repo}`,
     files: [".github/workflows/carbon-gate.yml", "carbon-gate.yml"],
-    next_steps: [
-      orgKey
-        ? `Add CARBON_GATE_ORG_KEY=${orgKey} as a GitHub repository secret`
-        : "Add your CARBON_GATE_ORG_KEY as a GitHub repository secret (find it in Settings)",
-      "Optionally add CRUSOE_API_KEY for AI-powered optimization suggestions",
-      "Open a Pull Request to trigger your first gate check",
-    ],
-    orgKey: orgKey || undefined,
+    orgApiKey: orgApiKey || undefined,
+    next_steps: orgApiKey
+      ? [
+          `Add CARBON_GATE_ORG_KEY as a GitHub repository secret`,
+          "Open a Pull Request to trigger your first gate check",
+        ]
+      : ["Open a Pull Request to trigger your first gate check"],
   });
 }

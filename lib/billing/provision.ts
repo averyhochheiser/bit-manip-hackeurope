@@ -40,6 +40,13 @@ export async function ensureBillingProfile({ userId, email }: ProvisionOptions) 
     period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
   });
 
+  // Provision an API key so the GitHub Action can authenticate gate checks
+  const apiKey = `cg_${randomUUID().replace(/-/g, "")}`;
+  await supabaseAdmin.from("org_api_keys").insert({
+    org_id: orgId,
+    api_key: apiKey,
+  });
+
   // Attempt to create a Stripe customer — non-blocking, fails gracefully.
   try {
     const customer = await stripe.customers.create({

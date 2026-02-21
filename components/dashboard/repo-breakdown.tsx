@@ -8,10 +8,9 @@ import { InstallCarbonGate } from "./install-carbon-gate";
 
 type RepoBreakdownProps = {
   reports: RepoReport[];
-  orgKey?: string;
 };
 
-export function RepoBreakdown({ reports, orgKey }: RepoBreakdownProps) {
+export function RepoBreakdown({ reports }: RepoBreakdownProps) {
   if (!reports || reports.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.01] p-12 text-center">
@@ -102,7 +101,7 @@ export function RepoBreakdown({ reports, orgKey }: RepoBreakdownProps) {
             {/* Install button for repos without gate data */}
             {report.hasGateData === false && (
               <div className="mt-4 border-t border-white/[0.03] pt-4">
-                <InstallCarbonGate repo={report.repo} orgKey={orgKey} />
+                <InstallCarbonGate repo={report.repo} />
               </div>
             )}
 

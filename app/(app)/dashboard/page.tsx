@@ -67,9 +67,6 @@ export default async function DashboardPage() {
 
   const externalContribRepos = contributorRepos.filter((r) => !orgRepoNames.has(r.repo));
 
-  // Org key for one-click install (so users can set up secrets)
-  const orgKey = profile.org_id;
-
   return (
     <DashboardLayout
       title="Organisation Overview"
@@ -91,7 +88,7 @@ export default async function DashboardPage() {
                 </span>
               )}
             </div>
-            <RepoBreakdown reports={allRepoReports} orgKey={orgKey} />
+            <RepoBreakdown reports={allRepoReports} />
           </div>
         )}
 
@@ -102,7 +99,7 @@ export default async function DashboardPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-floral/40">Your contributions</p>
               <span className="rounded-full bg-floral/[0.06] px-2 py-0.5 text-[10px] text-floral/30">across all orgs</span>
             </div>
-            <RepoBreakdown reports={externalContribRepos} orgKey={orgKey} />
+            <RepoBreakdown reports={externalContribRepos} />
           </div>
         )}
 
