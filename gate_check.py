@@ -1070,6 +1070,22 @@ def main():
     # Call API
     result = call_gate_api(config)
 
+    # Override status based on local config thresholds (API uses budget-based logic)
+    # This ensures thresholds from carbon-gate.yml are respected
+    emissions_kg = result.get("emissions_kg", 0)
+    threshold_kg = config.get("threshold_kg_co2", 2.0)
+    warn_kg = config.get("warn_kg_co2", 1.0)
+    
+    if emissions_kg >= threshold_kg:
+        result["status"] = "block"
+        output(f"Overriding status to 'block' (emissions {emissions_kg:.2f} kg >= threshold {threshold_kg} kg)", "info")
+    elif emissions_kg >= warn_kg:
+        result["status"] = "warn"
+        output(f"Overriding status to 'warn' (emissions {emissions_kg:.2f} kg >= warning {warn_kg} kg)", "info")
+    else:
+        result["status"] = "pass"
+        output(f"Status: 'pass' (emissions {emissions_kg:.2f} kg < warning {warn_kg} kg)", "info")
+
     # Fetch AI code suggestions from Crusoe (opt-in via suggest_crusoe config + CRUSOE_API_KEY)
     suggestions = None
     refactored_code = None
