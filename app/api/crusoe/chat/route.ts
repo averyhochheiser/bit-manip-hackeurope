@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
   try {
     body = await request.json();
-  } catch {
+  } catch (_e) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
 
     const data = await crusoeResp.json();
     return NextResponse.json(data);
-  } catch (err: unknown) {
+  } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
       { error: `Failed to reach Crusoe API: ${message}` },
