@@ -101,10 +101,14 @@ export async function getDashboardReadModel(orgId: string): Promise<DashboardRea
       repoMap.set(ev.repo, entry);
     });
 
+    // Proportional budget: split org budget across repos weighted by usage
+    const activeCount = Math.max(1, repoMap.size);
+    const repoBudgets = allocateRepoBudgets(includedKg, repoMap, activeCount);
+
     const repoReports: RepoReport[] = Array.from(repoMap.entries()).map(([name, stats]) => ({
       repo: name,
       usedKg: round1(stats.used),
-      budgetKg: 10.0,
+      budgetKg: round1(repoBudgets.get(name) ?? (includedKg / activeCount)),
       topContributor: "PR Author",
       totalGatesRun: stats.count,
     }));
@@ -228,10 +232,12 @@ export async function getGlobalDashboardPreview(): Promise<DashboardReadModel> {
       repoMap.set(ev.repo, entry);
     });
 
+    const globalBudgets = allocateRepoBudgets(budgetKg, repoMap, Math.max(1, repoMap.size));
+
     const repoReports: RepoReport[] = Array.from(repoMap.entries()).map(([name, stats]) => ({
       repo: name,
       usedKg: round1(stats.used),
-      budgetKg: 20.0,
+      budgetKg: round1(globalBudgets.get(name) ?? (budgetKg / Math.max(1, repoMap.size))),
       topContributor: "PR Author",
       totalGatesRun: stats.count,
     }));
@@ -261,3 +267,36 @@ export async function getGlobalDashboardPreview(): Promise<DashboardReadModel> {
 
 function round1(n: number) { return Math.round(n * 10) / 10; }
 function round2(n: number) { return Math.round(n * 100) / 100; }
+
+/**
+ * Distributes the org's total carbon budget across repos, weighted by usage.
+ */
+function allocateRepoBudgets(
+  orgBudgetKg: number,
+  usageByRepo: Map<string, { used: number; count: number }>,
+  totalRepoCount: number,
+): Map<string, number> {
+  const budgets = new Map<string, number>();
+  const totalUsed = Array.from(usageByRepo.values()).reduce((s, v) => s + v.used, 0);
+  const minSlice = orgBudgetKg / Math.max(1, totalRepoCount) * 0.1;
+
+  if (totalUsed <= 0 || usageByRepo.size === 0) {
+    return budgets;
+  }
+
+  let allocated = 0;
+  for (const [repo, stats] of usageByRepo) {
+    const share = Math.max(minSlice, (stats.used / totalUsed) * orgBudgetKg);
+    budgets.set(repo, share);
+    allocated += share;
+  }
+
+  if (allocated > orgBudgetKg * 1.01) {
+    const scale = orgBudgetKg / allocated;
+    for (const [repo, val] of budgets) {
+      budgets.set(repo, val * scale);
+    }
+  }
+
+  return budgets;
+}

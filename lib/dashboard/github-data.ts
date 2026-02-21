@@ -14,6 +14,48 @@ function round1(n: number) { return Math.round(n * 10) / 10; }
 function round2(n: number) { return Math.round(n * 100) / 100; }
 
 /**
+ * Distributes the org's total carbon budget across repos, weighted by usage.
+ *
+ * - Repos with gate activity get a share proportional to their emissions.
+ * - Every repo gets at least a minimum floor (10% of even split) so they
+ *   aren't shown at 0kg budget.
+ * - Repos with no activity share any remaining budget equally.
+ */
+function allocateRepoBudgets(
+  orgBudgetKg: number,
+  usageByRepo: Map<string, { used: number; count: number }>,
+  totalRepoCount: number,
+): Map<string, number> {
+  const budgets = new Map<string, number>();
+  const totalUsed = Array.from(usageByRepo.values()).reduce((s, v) => s + v.used, 0);
+  const minSlice = orgBudgetKg / Math.max(1, totalRepoCount) * 0.1; // 10% floor of even split
+
+  if (totalUsed <= 0 || usageByRepo.size === 0) {
+    // No usage data — split evenly
+    const even = orgBudgetKg / Math.max(1, totalRepoCount);
+    return budgets; // caller uses fallback: orgBudgetKg / activeRepoCount
+  }
+
+  // Weighted allocation: each repo gets share proportional to its usage
+  let allocated = 0;
+  for (const [repo, stats] of usageByRepo) {
+    const share = Math.max(minSlice, (stats.used / totalUsed) * orgBudgetKg);
+    budgets.set(repo, share);
+    allocated += share;
+  }
+
+  // If we over-allocated due to floors, scale down proportionally
+  if (allocated > orgBudgetKg * 1.01) {
+    const scale = orgBudgetKg / allocated;
+    for (const [repo, val] of budgets) {
+      budgets.set(repo, val * scale);
+    }
+  }
+
+  return budgets;
+}
+
+/**
  * Build dashboard data for a GitHub user using their real repos + any gate events.
  *
  * @param username  GitHub username (from user_metadata.user_name)
@@ -60,16 +102,33 @@ export async function getUserDashboardData(
       delta: crusoeSavings > 0 ? "if rerouted" : "install action to start",
       deltaPositive: crusoeSavings > 0,
     },
-    {
-      label: "Carbon overage cost",
-      value: "$0.00",
-      delta: "within budget",
-      deltaPositive: true,
-    },
   ];
 
-  // ── Budget ────────────────────────────────────────────────────────────
-  const budgetKg = 50;
+  // ── Budget (from DB or default) ───────────────────────────────────────
+  let orgBudgetKg = 50;
+  if (orgId) {
+    const { data: budget } = await supabaseAdmin
+      .from("carbon_budget")
+      .select("included_kg")
+      .eq("org_id", orgId)
+      .order("period_start", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (budget?.included_kg) orgBudgetKg = budget.included_kg;
+  }
+
+  // Now compute overage KPI (needs orgBudgetKg)
+  const overageKg = Math.max(0, totalEmissions - orgBudgetKg);
+  const overageCharge = round2(overageKg * 2.0);
+  kpis.push({
+    label: "Carbon overage cost",
+    value: overageCharge > 0 ? `$${overageCharge.toFixed(2)}` : "$0.00",
+    delta: overageCharge > 0
+      ? `${round1(overageKg)} kg over budget`
+      : `${round1(orgBudgetKg - totalEmissions)} kg remaining`,
+    deltaPositive: overageCharge === 0,
+  });
+
   const projectedKg = (() => {
     const day = new Date().getDate();
     return day > 0 ? (totalEmissions / day) * 30 : totalEmissions;
@@ -84,12 +143,17 @@ export async function getUserDashboardData(
     gateByRepo.set(ev.repo, entry);
   });
 
+  // Proportional budget: split org budget across repos weighted by usage,
+  // with a minimum floor so inactive repos still show a budget slice.
+  const activeRepoCount = Math.max(1, gateByRepo.size || githubRepos.length);
+  const repoBudgets = allocateRepoBudgets(orgBudgetKg, gateByRepo, activeRepoCount);
+
   const repoReports: RepoReport[] = githubRepos.slice(0, 20).map((gh) => {
     const gate = gateByRepo.get(gh.fullName);
     return {
       repo: gh.fullName,
       usedKg: gate ? round1(gate.used) : 0,
-      budgetKg: 10.0,
+      budgetKg: round1(repoBudgets.get(gh.fullName) ?? (orgBudgetKg / activeRepoCount)),
       topContributor: gh.relation === "owned" ? "you (owner)" : "you (contributor)",
       totalGatesRun: gate?.count ?? 0,
     };
@@ -101,7 +165,7 @@ export async function getUserDashboardData(
       repoReports.push({
         repo: repoName,
         usedKg: round1(stats.used),
-        budgetKg: 10.0,
+        budgetKg: round1(repoBudgets.get(repoName) ?? (orgBudgetKg / activeRepoCount)),
         topContributor: "gate data",
         totalGatesRun: stats.count,
       });
@@ -112,14 +176,14 @@ export async function getUserDashboardData(
     kpis,
     budget: {
       usedKg: round1(totalEmissions),
-      includedKg: budgetKg,
+      includedKg: orgBudgetKg,
       projectedKg: round1(projectedKg),
       warningPct: 80,
     },
     billing: {
       unitPrice: 2.0,
-      estimatedOverageKg: round2(Math.max(0, totalEmissions - budgetKg)),
-      estimatedCharge: round2(Math.max(0, (totalEmissions - budgetKg) * 2.0)),
+      estimatedOverageKg: round2(Math.max(0, totalEmissions - orgBudgetKg)),
+      estimatedCharge: round2(Math.max(0, (totalEmissions - orgBudgetKg) * 2.0)),
     },
     gateEvents: gateEvents.slice(0, 10),
     repoReports,
