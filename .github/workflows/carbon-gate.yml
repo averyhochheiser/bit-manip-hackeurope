@@ -9,7 +9,7 @@ on:
 
 permissions:
   pull-requests: write
-  contents: read
+  contents: write     # needed to commit efficiency patches to PR branches
 
 jobs:
   carbon-gate:

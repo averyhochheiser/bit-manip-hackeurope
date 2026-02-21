@@ -2,12 +2,18 @@ carbon-gate:
   estimated_hours: 8.0
   gpu: H100
   region: us-east-1
+  
+  # AI-powered suggestions and code refactoring via Crusoe Cloud
+  suggest_crusoe: true        # Get AI suggestions for carbon efficiency
+  auto_refactor: true         # Generate complete refactored code when emissions are high
+  
   security:
     allowed_teams: []
     max_overrides_per_month: 5
     notify_on_override: true
     override_permission: admin
     require_justification: true
-  suggest_crusoe: true
-  threshold_kg_co2: 2.0
-  warn_kg_co2: 1.0
+  
+  # TESTING: Very low thresholds to force refactoring
+  threshold_kg_co2: 0.5
+  warn_kg_co2: 0.1

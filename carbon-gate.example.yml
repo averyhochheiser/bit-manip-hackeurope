@@ -10,7 +10,15 @@ carbon-gate:
   # Emission thresholds
   threshold_kg_co2: 2.0 # Block if emissions exceed this
   warn_kg_co2: 1.0 # Warn if emissions exceed this
+  
+  # 🤖 AI-Powered Carbon Optimization (requires CRUSOE_API_KEY)
+  # Get AI suggestions for improving carbon efficiency of your training code
   suggest_crusoe: true
+  
+  # Automatically generate refactored code when emissions are high (warn/block status)
+  # Crusoe AI will analyze your code and provide complete refactored files
+  # optimized for reduced energy consumption (mixed-precision, gradient checkpointing, etc.)
+  auto_refactor: true
 
   # 🔒 Enhanced Security Configuration
   security:

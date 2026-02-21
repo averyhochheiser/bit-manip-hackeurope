@@ -1,0 +1,76 @@
+=== FILENAME: train.py ===
+```python
+import torch
+import torch.nn as nn
+from torch.cuda.amp import autocast, GradScaler
+from torch.utils.data import DataLoader
+from torch.optim import Adam
+import torch.nn.functional as F
+
+def train():
+    # Enable CUDA optimization
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    
+    model = nn.Linear(100, 10).cuda()
+    model.train()
+    
+    # Use AMP for mixed precision
+    scaler = GradScaler()
+    
+    optimizer = Adam(model.parameters(), lr=1e-3)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    
+    # Optimized data loading
+    dataloader = DataLoader(
+        dataset,
+        batch_size=64,
+        num_workers=8,
+        pin_memory=True,
+        shuffle=True,
+        prefetch_factor=2,
+        persistent_workers=True
+    )
+    
+    best_val_loss = float('inf')
+    patience = 0
+    epochs_without_improvement = 0
+    max_patience = 5  # early stopping patience
+    
+    for epoch in range(100):
+        for batch_idx, (data, target) in enumerate(dataloader):
+            data = data.cuda(non_blocking=True)
+            target = target.cuda(non_blocking=True)
+            
+            optimizer.zero_grad()
+            
+            # Mixed precision context
+            with autocast():
+                output = model(data)
+                loss = criterion(output, target)
+            
+            # Scaled backward pass
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            
+            # Avoid CPU transfer except for infrequent logging
+            if batch_idx % 200 == 0:
+                # Move to CPU only when needed
+                print(f'Epoch {epoch}, Batch {batch_idx}, Loss: {loss.item():.4f}')
+        
+        # Simulated validation loop (assumed to exist in full code)
+        # In practice, you'd evaluate on a val set
+        val_loss = 0.0  # placeholder
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience = 0
+        else:
+            patience += 1
+            if patience >= max_patience:
+                print(f"Early stopping at epoch {epoch}")
+                break
+
+    print("Training complete.")
+```
+=== END ===
