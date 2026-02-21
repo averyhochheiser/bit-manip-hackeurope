@@ -9,22 +9,47 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        crusoe: "#2B8CFF",
+        crusoe: "#98D2EB",
+        sage: "#69995D",
+        mauve: "#533745",
+        floral: "#FFF8F0",
         gate: {
-          bg: "#05070C",
-          panel: "#0B1020"
+          bg: "#23282E",
+          panel: "#2A3038"
         }
       },
       boxShadow: {
-        insetGlow: "inset 0 0 0 0.5px rgba(255,255,255,0.16)",
+        insetGlow: "inset 0 0.5px 0 0 rgba(255,248,240,0.1)",
         panel: "0 24px 60px rgba(0,0,0,0.35)"
       },
       backgroundImage: {
         noise:
-          "radial-gradient(circle at 20% 20%, rgba(43,140,255,0.12), transparent 35%), radial-gradient(circle at 80% 0%, rgba(8,242,160,0.08), transparent 25%)"
+          "radial-gradient(circle at 20% 20%, rgba(152,210,235,0.06), transparent 35%), radial-gradient(circle at 80% 0%, rgba(105,153,93,0.04), transparent 25%)"
       },
       fontFamily: {
-        monoData: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"]
+        display: [
+          "var(--font-display)",
+          "Inter",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "sans-serif"
+        ],
+        serif: [
+          "var(--font-serif)",
+          "Playfair Display",
+          "Georgia",
+          "Cambria",
+          "serif"
+        ],
+        monoData: [
+          "var(--font-mono)",
+          "JetBrains Mono",
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "monospace"
+        ]
       }
     }
   },

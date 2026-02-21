@@ -13,7 +13,7 @@
     "@supabase/ssr": "latest",
     "@supabase/supabase-js": "latest",
     "clsx": "^2.1.1",
-    "framer-motion": "latest",
+    "framer-motion": "^12.34.3",
     "lucide-react": "latest",
     "next": "latest",
     "react": "latest",
