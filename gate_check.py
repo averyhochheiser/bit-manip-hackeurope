@@ -26,6 +26,9 @@ except ImportError:
 # Output mode: 'text' for terminal, 'json' for web apps
 OUTPUT_MODE = os.environ.get("OUTPUT_MODE", "text").lower()
 
+# Set by the carbon-gate-apply workflow when a user comments /apply-crusoe-patch
+APPLY_PATCH_REQUESTED = os.environ.get("APPLY_PATCH_REQUESTED", "false").lower() == "true"
+
 
 def output(message: str, level: str = "info", data: Optional[Dict] = None):
     """Unified output function that can switch between text and JSON modes"""
@@ -612,6 +615,76 @@ def apply_patch_to_pr(patch: str) -> bool:
     return committed > 0
 
 
+def _post_reply(message: str):
+    """Post a comment to the PR (used for apply-patch mode responses)."""
+    github_token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    pr_number = os.environ.get("PR_NUMBER")
+
+    if not github_token or not repo or not pr_number:
+        output("Missing env vars for reply comment", "warn")
+        return
+
+    url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    try:
+        resp = requests.post(url, json={"body": message}, headers=headers, timeout=10)
+        resp.raise_for_status()
+        output("Posted reply comment", "success")
+    except requests.exceptions.RequestException as e:
+        output(f"Failed to post reply: {e}", "warn")
+
+
+def run_patch_apply_mode(config: dict):
+    """
+    Apply the Crusoe AI optimization patch in response to a /apply-crusoe-patch comment.
+    Generates the patch fresh from Crusoe and commits it to the PR branch.
+    """
+    pr_number = os.environ.get("PR_NUMBER")
+    output(f"Patch apply mode for PR #{pr_number}", "info")
+
+    file_contents = get_pr_file_contents()
+    if not file_contents:
+        _post_reply("❌ No Python files found in this PR — nothing to patch.")
+        return
+
+    output("Generating Crusoe AI optimizations...", "info")
+    suggestions, patch = call_crusoe_for_suggestions(file_contents, config)
+
+    if not patch:
+        if suggestions:
+            _post_reply(
+                "⚠️ Crusoe generated suggestions but no auto-applicable patch was found. "
+                "Please apply manually:\n\n<details>\n<summary>Suggestions</summary>\n\n"
+                f"{suggestions}\n\n</details>"
+            )
+        else:
+            _post_reply("❌ Could not generate a patch. Please try again or apply suggestions manually.")
+        return
+
+    output(f"Applying patch ({len(patch)} chars)...", "info")
+    applied = apply_patch_to_pr(patch)
+
+    if applied:
+        _post_reply(
+            "⚡ **Crusoe efficiency patch applied!**\n\n"
+            "Optimized code has been committed to this branch. "
+            "The Carbon Gate check will re-run automatically on the next push.\n\n"
+            "<details>\n<summary>View applied patch</summary>\n\n"
+            f"```diff\n{patch}\n```\n\n</details>"
+        )
+        output("Efficiency patch committed to PR branch", "success")
+    else:
+        _post_reply(
+            "⚠️ Could not auto-apply the patch. Please apply manually:\n\n"
+            "```bash\n# Save the patch below to efficiency.patch, then:\ngit apply efficiency.patch\n```\n\n"
+            f"<details>\n<summary>Patch</summary>\n\n```diff\n{patch}\n```\n\n</details>"
+        )
+
+
 def load_config():
     """Load carbon-gate.yml from repository root"""
     config_path = Path("carbon-gate.yml")
@@ -1008,303 +1081,129 @@ def call_gate_api(config):
     return result
 
 
-def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: Optional[str] = None, patch_applied: bool = False, suggestions_ai_powered: bool = True):
-    """Format the Carbon Gate report as a PR comment with educational, firm tone"""
+def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: Optional[str] = None, suggestions_ai_powered: bool = True):
+    """Format the Carbon Gate report as a concise PR comment."""
     _GPU_TDP_REF = {"H100": 700, "A100": 400, "V100": 300, "A10": 150, "A10G": 150, "T4": 70, "L40": 300}
     emissions = result["emissions_kg"]
     crusoe_emissions = result["crusoe_emissions_kg"]
     status = result["status"]
-    budget_remaining = result["budget_remaining_kg"]
-    optimal_window = result.get("optimal_window", "No recommendation available")
-    crusoe_available = result.get("crusoe_available", False)
-    crusoe_instance = result.get("crusoe_instance", "N/A")
+    optimal_window = result.get("optimal_window", "")
     carbon_intensity = result.get("carbon_intensity", 0)
 
     threshold_kg = config.get("threshold_kg_co2", 2.0)
     warn_kg = config.get("warn_kg_co2", 1.0)
 
-    # Status emoji and header
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app")
+    dashboard_url = f"{api_endpoint}/dashboard"
+
     if status == "block":
-        status_emoji = "🔴"   # red circle
+        status_emoji = "🔴"
         status_label = "BLOCKED"
-        status_text = f"**Exceeds carbon threshold** ({threshold_kg} kg)"
-        status_message = (
-            f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which exceeds your "
-            f"organization's carbon threshold of {threshold_kg} kg. The PR merge is blocked until "
-            f"emissions are reduced or an override is approved."
-        )
+        limit_note = f"exceeds {threshold_kg} kg block threshold — merge blocked"
     elif status == "warn":
-        status_emoji = "🟡"   # yellow circle
+        status_emoji = "🟡"
         status_label = "WARNING"
-        status_text = f"**Approaching threshold** (warn: {warn_kg} kg, block: {threshold_kg} kg)"
-        status_message = (
-            f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which exceeds the "
-            f"warning threshold of {warn_kg} kg. Consider the optimisation suggestions below to "
-            f"reduce environmental impact before this approaches the block threshold of {threshold_kg} kg."
-        )
+        limit_note = f"above {warn_kg} kg warning threshold (block at {threshold_kg} kg)"
     else:
-        status_emoji = "🟢"   # green circle
+        status_emoji = "🟢"
         status_label = "PASSED"
-        status_text = "Within acceptable limits"
-        status_message = (
-            f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which is within your "
-            f"configured limits (warn: {warn_kg} kg, block: {threshold_kg} kg)."
-        )
+        limit_note = f"within limits (warn: {warn_kg} kg, block: {threshold_kg} kg)"
 
-    # Calculate environmental impact
-    savings_pct = (
-        int(((emissions - crusoe_emissions) / emissions) * 100) if emissions > 0 else 0
-    )
-
-    # Equivalent impact (make it tangible)
-    car_miles = emissions * 2.31  # 1 kgCO2 ≈ 2.31 miles driven
-    trees_needed = emissions / 21  # 1 tree absorbs ~21kg CO2/year
-
-    # Estimate costs (rough AWS pricing)
+    savings_pct = int(((emissions - crusoe_emissions) / emissions) * 100) if emissions > 0 else 0
     gpu_hourly_rate = {"A100": 3.55, "H100": 4.10, "V100": 2.48, "A10": 1.12}
-    current_cost = gpu_hourly_rate.get(config.get("gpu", "A100"), 3.55) * config.get(
-        "estimated_hours", 1.0
-    )
-    crusoe_cost = current_cost * 1.15  # Crusoe typically ~15% more expensive
+    current_cost = gpu_hourly_rate.get(config.get("gpu", "A100"), 3.55) * config.get("estimated_hours", 1.0)
+    crusoe_cost = current_cost * 1.15
+    cost_diff_pct = ((crusoe_cost - current_cost) / current_cost) * 100
 
+    # Header + Crusoe comparison table
     comment = f"""## {status_emoji} Carbon Gate — {status_label}
 
-{status_message}
+**{emissions:.2f} kgCO₂eq** — {limit_note}
+[View dashboard →]({dashboard_url})
 
 ---
 
-### Emissions Estimate
-
-| Metric | Value |
-|--------|-------|
-| **Carbon Footprint** | **{emissions:.2f} kgCO₂eq** — {status_text} |
-| **Grid Carbon Intensity** | {carbon_intensity} gCO₂/kWh ({config.get('region', 'us-east-1')}) |
-| **Equivalent Impact** | ~{car_miles:.0f} miles driven by car \u2022 {trees_needed:.2f} tree-years to offset |
-| **Compute Cost** | ~${current_cost:.2f} |
-
-"""
-
-    if crusoe_available:
-        cost_increase_pct = ((crusoe_cost - current_cost) / current_cost) * 100
-        comment += f"""---
-
-### Cleaner Alternative Available
-
-**Crusoe Cloud is ready to run this job with {savings_pct}% less carbon:**
-
-| Comparison | Current Setup | Crusoe (Geothermal) | Improvement |
-|------------|---------------|---------------------|-------------|
+| | Current | Crusoe (Geothermal) | |
+|--|---------|---------------------|--|
 | **Emissions** | {emissions:.2f} kgCO₂eq | {crusoe_emissions:.2f} kgCO₂eq | **-{savings_pct}%** ✅ |
-| **Energy Source** | Grid mix | 100% geothermal | Clean energy |
-| **Cost** | ${current_cost:.2f} | ${crusoe_cost:.2f} | +${crusoe_cost - current_cost:.2f} (+{cost_increase_pct:.1f}%) |
-| **Available GPUs** | — | `{crusoe_instance}` | Ready now |
-
-**Why this matters:** Using clean energy infrastructure reduces environmental impact while maintaining performance. The additional cost represents a {cost_increase_pct:.1f}% premium for {savings_pct}% cleaner computing.
+| **Energy** | Grid mix ({carbon_intensity} gCO₂/kWh) | 100% geothermal (5 gCO₂/kWh) | Clean |
+| **Cost** | ${current_cost:.2f} | ${crusoe_cost:.2f} | +{cost_diff_pct:.0f}% |
 
 """
-    else:
+
+    # Code suggestions from Crusoe AI
+    if suggestions:
+        ai_note = "Crusoe Cloud geothermal inference (~5 gCO₂/kWh)" if suggestions_ai_powered else "static analysis"
+
+        patch_block = ""
+        if patch:
+            patch_block = f"""
+**Patch:**
+```diff
+{patch}
+```"""
+
         comment += f"""---
 
-### Clean Energy Option
+### 🧠 Code Optimizations via Crusoe AI
 
-Crusoe's geothermal infrastructure could reduce emissions by up to {savings_pct}%, but is currently at capacity in this region. Consider:
-- Scheduling this job for when Crusoe capacity becomes available
-- Running during lower grid carbon intensity hours (see optimal window below)
-
-"""
-
-    comment += f"""---
-
-### Your Carbon Budget
-
-**Monthly usage:** {50.0 - budget_remaining:.1f} / 50.0 kgCO₂eq  
-**Remaining budget:** {budget_remaining:.1f} kg  
-**After this job:** {budget_remaining - emissions:.1f} kg remaining
-
-"""
-
-    if budget_remaining - emissions < 0:
-        overage = emissions - budget_remaining
-        overage_cost = overage * 2.0  # $2/kg carbon price
-        comment += f"""**Budget Alert:** This job would exceed your monthly carbon budget by {overage:.1f} kg, resulting in ${overage_cost:.2f} in overage charges.
-
-"""
-    elif budget_remaining - emissions < 10:
-        comment += f"""**Budget Notice:** This job would leave only {budget_remaining - emissions:.1f} kg in your monthly budget.
-
-"""
-
-    comment += f"""---
-
-### Timing Optimization
-
-**Grid forecast:** {optimal_window}
-
-Running your job when grid carbon intensity is lower can significantly reduce emissions at no additional cost.
-
----
+> *Powered by [{ai_note}](https://crusoe.ai)*
 
 <details>
-<summary>🔍 Technical Details &amp; Methodology</summary>
+<summary>View suggestions & patch</summary>
+
+{suggestions}
+{patch_block}
+</details>
+
+"""
+
+        if patch:
+            comment += """**To apply these optimizations automatically, comment on this PR:**
+```
+/apply-crusoe-patch
+```
+*Carbon Gate will commit the changes to your branch.*
+
+"""
+
+    # Technical details (collapsed)
+    comment += f"""---
+
+<details>
+<summary>🔍 Technical details & methodology</summary>
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
-| GPU Type | {config.get('gpu', 'A100')} ({_GPU_TDP_REF.get(config.get('gpu', 'A100'), '?')}W TDP) | NVIDIA datasheet |
-| Est. Training Time | {config.get('estimated_hours', 1.0)} hours | `carbon-gate.yml` config |
+| GPU | {config.get('gpu', 'A100')} ({_GPU_TDP_REF.get(config.get('gpu', 'A100'), '?')}W TDP) | NVIDIA datasheet |
+| Training time | {config.get('estimated_hours', 1.0)} h | carbon-gate.yml |
 | PUE | {result.get('pue_used', 1.1):.4f} ± {result.get('pue_sigma', 0):.4f} | Carnot-cycle thermodynamic model |
-| Thermal Throttling | -{result.get('throttle_adjustment_pct', 0):.1f}% from nameplate TDP | Coupled ODE (scipy RK45) |
-| Region | {config.get('region', 'us-east-1')} | `carbon-gate.yml` config |
-| Grid Carbon Intensity | {carbon_intensity} ± {result.get('intensity_sigma', 0):.0f} gCO₂/kWh | {result.get('intensity_source', 'regional baseline').replace('_', ' ').title()} |
-| Operational Emissions | {result.get('operational_kg', emissions * 0.95):.4f} kgCO₂eq | energy × intensity |
-| Embodied Carbon | {result.get('embodied_kg', emissions * 0.05):.4f} kgCO₂eq | Lifecycle amortisation (±30%) |
-| Uncertainty (±1σ) | ± {result.get('emissions_sigma', 0):.4f} kgCO₂eq | Quadrature propagation |
+| Thermal throttling | -{result.get('throttle_adjustment_pct', 0):.1f}% | Coupled ODE (scipy RK45) |
+| Region | {config.get('region', 'us-east-1')} | carbon-gate.yml |
+| Grid intensity | {carbon_intensity} ± {result.get('intensity_sigma', 0):.0f} gCO₂/kWh | {result.get('intensity_source', 'regional baseline').replace('_', ' ').title()} |
+| Operational | {result.get('operational_kg', emissions * 0.95):.4f} kgCO₂eq | energy × intensity |
+| Embodied | {result.get('embodied_kg', emissions * 0.05):.4f} kgCO₂eq | lifecycle amortisation (±30%) |
+| Uncertainty | ± {result.get('emissions_sigma', 0):.4f} kgCO₂eq | quadrature propagation |
 
-**Calculation Pipeline:**
-1. **PUE** — Derived from Carnot efficiency: COP = η × T_cold / (T_hot − T_cold) → PUE = 1 + 1/COP
-2. **Thermal Throttling** — GPU junction temp modelled as coupled ODE solved via RK45 integration
-3. **Operational CO₂** — energy (kWh) = ∫P(t)dt × PUE → CO₂ = energy × grid_intensity / 1000
-4. **Embodied Carbon** — Manufacturing CO₂ amortised: C_mfg / (lifetime_h × utilisation)
-5. **Total** — Operational + Embodied, with uncertainty via quadrature: σ_total = √(σ_op² + σ_emb²)
-
-**References:**
-- GPU TDP — [NVIDIA H100 Datasheet](https://resources.nvidia.com/en-us-tensor-core) / [A100 Whitepaper](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a100/pdf/nvidia-a100-datasheet.pdf)
-- Embodied Carbon — Gupta et al. (2022) *"Chasing Carbon: The Elusive Environmental Footprint of Computing"* IEEE HPCA; Patterson et al. (2021) *"Carbon Emissions and Large Neural Network Training"*
-- PUE Thermodynamics — ASHRAE TC 9.9 (2021) *Thermal Guidelines for Data Processing Environments*
-- Grid Intensity — WattTime MOER (marginal operating emissions rate) when available; Electricity Maps zonal averages as fallback
-- Radiative Forcing — IPCC AR6 WG1 Ch.7: ΔF = 5.35 × ln(C/C₀) W/m²
+**Calculation pipeline:**
+1. PUE from Carnot efficiency: COP = η × T_cold / (T_hot − T_cold)
+2. Thermal throttling via coupled ODE (RK45)
+3. Operational CO₂ = ∫P(t)dt × PUE × grid_intensity / 1000
+4. Embodied carbon = C_mfg / (lifetime_h × utilisation)
+5. Total = Operational + Embodied, σ = √(σ_op² + σ_emb²)
 
 </details>
 
 """
 
-    if suggestions:
-        if suggestions_ai_powered:
-            _suggestion_note = "> *AI analysis powered by [Crusoe Cloud](https://crusoe.ai) — running on geothermal energy (~5 gCO₂/kWh)*"
-        else:
-            _suggestion_note = "> *General recommendations based on your config. For **AI-powered code analysis and automatic patches**, add `CRUSOE_API_KEY` — powered by [Crusoe Cloud](https://crusoe.ai) on geothermal energy*"
-        comment += f"""---
-
-### 🧠 Code Efficiency Suggestions
-
-{_suggestion_note}
-
-{suggestions}
-
-"""
-
-
-    if patch:
-        if patch_applied:
-            comment += """---
-
-### \u26a1 Efficiency Patch Applied
-
-> **Carbon Gate has automatically committed optimized code to this PR branch.**
-> The patch implements the suggestions above. Review the new commit and re-run the check to see reduced emissions.
-
-<details>
-<summary>View applied patch</summary>
-
-```diff
-""" + patch + """
-```
-
-</details>
-
-"""
-        else:
-            comment += """---
-
-### \U0001f527 Efficiency Patch Available
-
-> Carbon Gate generated a patch to implement the suggestions above. Apply it to your branch:
-
-```bash
-# Download and apply the patch
-curl -sL "PATCH_URL" | git apply
-# Or copy the diff below and run:
-# git apply < efficiency.patch
-```
-
-<details>
-<summary>View patch (click to expand)</summary>
-
-```diff
-""" + patch + """
-```
-
-</details>
-
-**To apply manually:**
-1. Copy the diff above into a file called `efficiency.patch`
-2. Run `git apply efficiency.patch`
-3. Commit and push — the Carbon Gate check will re-run automatically
-
-"""
-
-
-    comment += """---
-
-### What You Can Do
-
-"""
-
-    if status == "block":
-        comment += f"""**This PR is currently blocked due to high emissions.** To proceed, you have these options:
-
-1. **✅ Review Code Suggestions** — Carbon Gate has analysed your code above and (if available) auto-committed an efficiency patch to this branch. Review the suggestions above, apply changes, then re-run the check.
-2. **⏰ Optimize Timing** — {optimal_window}
-3. **☁️ Switch to Clean Energy** — Run on [Crusoe Cloud](https://crusoe.ai) geothermal infrastructure ({savings_pct}% less carbon at ~15% cost premium)
-4. **🔓 Request Override** — Authorized team members can add the `carbon-override` label with a justification comment
-
-"""
-    else:
-        comment += f"""Consider these options to reduce environmental impact:
-
-1. **✅ Review Code Suggestions** — See the AI-generated efficiency suggestions above. If a patch was auto-applied, review the new commit on this branch.
-2. **⏰ Optimize Timing** — {optimal_window}
-3. **☁️ Switch to Clean Energy** — [Crusoe Cloud](https://crusoe.ai) geothermal infrastructure would cut emissions by {savings_pct}%
-
-"""
-
-    # Crusoe-powered code optimization section
-    comment += f"""---
-
-### 🚀 Crusoe AI Code Optimization
-
-Carbon Gate uses [Crusoe Cloud](https://crusoe.ai)'s AI inference — powered by **100% clean geothermal energy** (~5 gCO₂/kWh vs ~{carbon_intensity} gCO₂/kWh grid average) — to analyse your code and generate efficiency patches.
-
-{'✅ **AI analysis completed** — see suggestions above.' if suggestions_ai_powered else '⚠️ **Static suggestions shown** — AI analysis was unavailable. Add `CRUSOE_API_KEY` as a repository secret for code-specific analysis and auto-patching.'}
-
-**How it works:**
-1. Crusoe AI reviews every changed Python file in your PR
-2. It generates specific, actionable suggestions to reduce compute time
-3. When possible, it creates a unified diff patch and **auto-commits it to your branch**
-4. Re-run the Carbon Gate check to verify reduced emissions
-
-"""
-
-    # Add security policy info
+    # Compact footer
     security_config = config.get("security", {})
     required_perm = security_config.get("override_permission", "admin")
+    timing_note = ""
+    if optimal_window and len(optimal_window) > 20 and "no significant" not in optimal_window.lower():
+        timing_note = f" · ⏰ {optimal_window[:80]}"
 
-    comment += f"""<sub>
-
-**Override Policy:** Requires `{required_perm}` permissions"""
-
-    if security_config.get("require_justification", True):
-        comment += f" + justification"
-
-    if security_config.get("allowed_teams"):
-        teams = ", ".join(security_config["allowed_teams"])
-        comment += f" | Authorized teams: {teams}"
-
-    comment += f"""
-
-[Learn more about Carbon Gate](https://github.com/averyhochheiser/bit-manip-hackeurope) | **Building sustainable ML practices together** 🌱
-
-</sub>
-"""
+    comment += f"""<sub>[Dashboard →]({dashboard_url}){timing_note} · Override: `{required_perm}` + justification via `carbon-override` label · 🌱</sub>"""
 
     return comment
 
@@ -1391,6 +1290,13 @@ def main():
     # Load configuration
     config = load_config()
 
+    # Handle /apply-crusoe-patch comment command (separate workflow trigger)
+    if APPLY_PATCH_REQUESTED:
+        run_patch_apply_mode(config)
+        if OUTPUT_MODE != "json":
+            print("=" * 80)
+        return
+
     # Check for override label (with enhanced security)
     override_check = check_override_label(config)
     if override_check and override_check["allowed"]:
@@ -1443,7 +1349,6 @@ def main():
     # Fetch AI code suggestions + patch from Crusoe
     suggestions = None
     patch = None
-    patch_applied = False
     suggestions_ai_powered = False
 
     if config.get("suggest_crusoe", True):
@@ -1461,14 +1366,8 @@ def main():
                 else:
                     output("Crusoe API returned no content, using static suggestions", "warn")
 
-                # Auto-apply patch to PR branch if available
                 if patch:
-                    output(f"Unified diff patch generated ({len(patch)} chars)", "info")
-                    patch_applied = apply_patch_to_pr(patch)
-                    if patch_applied:
-                        output("Efficiency patch committed to PR branch", "success")
-                    else:
-                        output("Could not auto-apply patch (will show in comment for manual apply)", "warn")
+                    output(f"Unified diff patch generated ({len(patch)} chars) — comment /apply-crusoe-patch to apply", "info")
             else:
                 output("No Python files found in PR, using static suggestions", "info")
         else:
@@ -1481,7 +1380,7 @@ def main():
         output("AI suggestions disabled (suggest_crusoe: false in config)", "info")
 
     # Format and post PR comment
-    comment = format_pr_comment(config, result, suggestions, patch, patch_applied, suggestions_ai_powered)
+    comment = format_pr_comment(config, result, suggestions, patch, suggestions_ai_powered)
     post_pr_comment(comment)
 
     # Check if gate should block
