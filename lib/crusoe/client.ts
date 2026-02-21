@@ -1,7 +1,7 @@
 /**
  * Crusoe Inference API client
  *
- * Base URL: https://api.crusoe.ai/v1  (OpenAI-compatible)
+ * HackEurope 2026 dedicated endpoint: https://hackeurope.crusoecloud.com/v1
  * Auth:     Bearer <CRUSOE_API_KEY>
  *
  * We use the /models endpoint to check real-time availability and surface
@@ -9,7 +9,7 @@
  * Crusoe runs on geothermal + solar → effectively ~5 gCO₂/kWh.
  */
 
-const CRUSOE_API_BASE = "https://api.crusoe.ai/v1";
+const CRUSOE_API_BASE = "https://hackeurope.crusoecloud.com/v1";
 
 // Carbon intensity for Crusoe infrastructure (geothermal/solar, gCO₂eq/kWh)
 export const CRUSOE_CARBON_INTENSITY_G_PER_KWH = 5;
@@ -30,40 +30,17 @@ export interface CrusoeAvailability {
 
 /**
  * Preference map: GPU type → favourite model families (ordered by preference).
- * Uses real model IDs from Crusoe's live /models endpoint (verified Feb 2026).
- *
- * Available models:
- *   Qwen/Qwen3-235B-A22B-Instruct-2507   (235B params)
- *   deepseek-ai/DeepSeek-R1-0528          (reasoning)
- *   deepseek-ai/DeepSeek-V3-0324          (general)
- *   google/gemma-3-12b-it                 (lightweight)
- *   meta-llama/Llama-3.3-70B-Instruct     (70B, versatile)
- *   moonshotai/Kimi-K2-Thinking           (reasoning)
- *   openai/gpt-oss-120b                   (120B)
+ * HackEurope 2026 endpoint hosts a single dedicated model (verified Feb 2026):
+ *   NVFP4/Qwen3-235B-A22B-Instruct-2507-FP4  — Qwen3 235B, fp4 quantised, 262k ctx
  */
+const HACKEUROPE_MODEL = "NVFP4/Qwen3-235B-A22B-Instruct-2507-FP4";
+
 const GPU_MODEL_PREFERENCES: Record<string, string[]> = {
-  H100: [
-    "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "deepseek-ai/DeepSeek-R1-0528",
-    "openai/gpt-oss-120b",
-  ],
-  A100: [
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "deepseek-ai/DeepSeek-V3-0324",
-    "openai/gpt-oss-120b",
-  ],
-  V100: [
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "google/gemma-3-12b-it",
-  ],
-  A10: [
-    "google/gemma-3-12b-it",
-    "meta-llama/Llama-3.3-70B-Instruct",
-  ],
-  A10G: [
-    "google/gemma-3-12b-it",
-    "meta-llama/Llama-3.3-70B-Instruct",
-  ],
+  H100:  [HACKEUROPE_MODEL],
+  A100:  [HACKEUROPE_MODEL],
+  V100:  [HACKEUROPE_MODEL],
+  A10:   [HACKEUROPE_MODEL],
+  A10G:  [HACKEUROPE_MODEL],
 };
 
 export async function getCrusoeAvailability(gpuType: string): Promise<CrusoeAvailability> {
@@ -104,7 +81,7 @@ export async function getCrusoeAvailability(gpuType: string): Promise<CrusoeAvai
     return {
       available: true,
       models: [],
-      recommendedModel: "meta-llama/Llama-3.3-70B-Instruct",
+      recommendedModel: HACKEUROPE_MODEL,
     };
   }
 }
