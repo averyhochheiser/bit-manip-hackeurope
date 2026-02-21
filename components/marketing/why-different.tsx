@@ -19,38 +19,46 @@ const points = [
 
 export function WhyDifferent() {
   return (
-    <section className="relative py-16 sm:py-20">
-      <div className="mb-8">
-        <p className="text-xs uppercase tracking-[0.2em] text-floral/55">Why we are different</p>
-        <h2 className="mt-3 font-display text-3xl font-bold text-floral sm:text-4xl">
+    <section className="relative py-24">
+      <div className="mb-12">
+        <p className="text-[10px] uppercase tracking-widest text-ink-muted">
+          Why we are different
+        </p>
+        <h2 className="mt-4 text-2xl font-normal tracking-tight text-ink">
           Built for enforcement and accountability
         </h2>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {points.map((point, index) => (
           <motion.article
             key={point.title}
-            className="panel p-5"
-            initial={{ opacity: 0, y: 22 }}
+            className="rounded border-[0.5px] border-border-subtle bg-canvas-raised px-8 py-10"
+            initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.35 }}
-            transition={{ delay: index * 0.08, duration: 0.45, ease: "easeOut" }}
+            transition={{
+              delay: index * 0.08,
+              duration: 0.5,
+              ease: "easeOut"
+            }}
           >
-            <h3 className="text-lg font-semibold text-floral">{point.title}</h3>
-            <p className="mt-3 text-sm text-floral/70">{point.copy}</p>
+            <h3 className="text-base font-normal text-ink">{point.title}</h3>
+            <p className="mt-4 text-sm font-light leading-relaxed text-ink-muted">
+              {point.copy}
+            </p>
           </motion.article>
         ))}
       </div>
 
-      <div className="mt-7 flex flex-wrap gap-3 text-xs uppercase tracking-[0.14em] text-floral/45">
-        <span className="rounded-full border border-floral/10 bg-floral/[0.02] px-3 py-1">
+      <div className="mt-10 flex flex-wrap gap-4 text-[10px] uppercase tracking-widest text-ink-faint">
+        <span className="rounded border-[0.5px] border-border-subtle px-4 py-2">
           Radiative Forcing Modeled
         </span>
-        <span className="rounded-full border border-floral/10 bg-floral/[0.02] px-3 py-1">
+        <span className="rounded border-[0.5px] border-border-subtle px-4 py-2">
           Embodied Carbon Aware
         </span>
-        <span className="rounded-full border border-floral/10 bg-floral/[0.02] px-3 py-1">
+        <span className="rounded border-[0.5px] border-border-subtle px-4 py-2">
           Fourier Carbon Forecasting
         </span>
       </div>

@@ -3,40 +3,29 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
 body {
-  background: #23282e;
-  color: #fff8f0;
+  background: #f5f3f0;
+  color: #3a3a38;
 }
 
 body {
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .panel {
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 248, 240, 0.15);
-  background: rgba(255, 248, 240, 0.03);
-  box-shadow: inset 0 0.5px 0 0 rgba(255, 248, 240, 0.1), 0 24px 60px rgba(0, 0, 0, 0.35);
+  border-radius: 0.25rem;
+  border: 0.5px solid #e0ddd9;
+  background: #edeae6;
 }
 
 .panel-muted {
-  border-radius: 0.75rem;
-  border: 1px solid rgba(255, 248, 240, 0.1);
-  background: rgba(255, 248, 240, 0.02);
-  box-shadow: inset 0 0.5px 0 0 rgba(255, 248, 240, 0.08);
-}
-
-.hero-glow {
-  background: radial-gradient(circle at center, rgba(152, 210, 235, 0.14), transparent 62%);
-}
-
-.card-floral {
-  background: #fff8f0;
-  color: #23282e;
-  border-radius: 1.25rem;
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.08);
+  border-radius: 0.25rem;
+  border: 0.5px solid #e0ddd9;
+  background: transparent;
 }

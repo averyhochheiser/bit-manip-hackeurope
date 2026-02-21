@@ -7,7 +7,10 @@ type SettingsPanelProps = {
   warningPct: number;
 };
 
-export function SettingsPanel({ defaultBudgetKg, warningPct }: SettingsPanelProps) {
+export function SettingsPanel({
+  defaultBudgetKg,
+  warningPct
+}: SettingsPanelProps) {
   const [budgetKg, setBudgetKg] = useState(defaultBudgetKg);
   const [warning, setWarning] = useState(warningPct);
   const [status, setStatus] = useState<string | null>(null);
@@ -18,7 +21,11 @@ export function SettingsPanel({ defaultBudgetKg, warningPct }: SettingsPanelProp
 
     const response = await fetch("/api/usage/ingest", {
       method: "POST",
-      body: JSON.stringify({ mode: "settings-preview", budgetKg, warningPct: warning })
+      body: JSON.stringify({
+        mode: "settings-preview",
+        budgetKg,
+        warningPct: warning
+      })
     });
 
     setStatus(response.ok ? "Saved budget policy." : "Could not save yet.");
@@ -41,51 +48,59 @@ export function SettingsPanel({ defaultBudgetKg, warningPct }: SettingsPanelProp
   }
 
   return (
-    <section className="panel p-6">
-      <h2 className="text-xl font-semibold text-floral">Settings</h2>
-      <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-        <label className="block text-sm text-floral/75">
-          Budget threshold (kgCO2e / period)
+    <section className="rounded border-[0.5px] border-border-subtle bg-canvas-raised px-8 py-10">
+      <h2 className="text-lg font-normal text-ink">Settings</h2>
+      <form className="mt-10 space-y-8" onSubmit={onSubmit}>
+        <label className="block text-sm font-light text-ink-muted">
+          <span className="text-[10px] uppercase tracking-widest">
+            Budget threshold (kgCO2e / period)
+          </span>
           <input
             type="number"
             value={budgetKg}
             onChange={(event) => setBudgetKg(Number(event.target.value))}
-            className="mt-2 w-full rounded-lg border border-floral/15 bg-gate-bg/80 px-3 py-2 font-monoData text-floral outline-none ring-crusoe/50 focus:ring-2"
+            className="mt-3 w-full rounded border-[0.5px] border-border-subtle bg-canvas px-4 py-3 font-mono text-sm font-light text-ink outline-none transition-colors focus:border-stoneware-turquoise"
           />
         </label>
-        <label className="block text-sm text-floral/75">
-          Warning threshold (%)
+        <label className="block text-sm font-light text-ink-muted">
+          <span className="text-[10px] uppercase tracking-widest">
+            Warning threshold (%)
+          </span>
           <input
             type="number"
             min={1}
             max={99}
             value={warning}
             onChange={(event) => setWarning(Number(event.target.value))}
-            className="mt-2 w-full rounded-lg border border-floral/15 bg-gate-bg/80 px-3 py-2 font-monoData text-floral outline-none ring-crusoe/50 focus:ring-2"
+            className="mt-3 w-full rounded border-[0.5px] border-border-subtle bg-canvas px-4 py-3 font-mono text-sm font-light text-ink outline-none transition-colors focus:border-stoneware-turquoise"
           />
         </label>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-4 pt-2">
           <button
             type="submit"
-            className="rounded-lg border border-floral/15 bg-floral/10 px-4 py-2 text-sm font-medium text-floral transition hover:bg-floral/20"
+            className="rounded bg-ink px-5 py-3 text-[10px] uppercase tracking-widest text-canvas transition-opacity hover:opacity-80"
           >
             Save policy
           </button>
           <button
             type="button"
             onClick={startSubscription}
-            className="rounded-lg border border-sage/35 bg-sage/15 px-4 py-2 text-sm font-medium text-sage transition hover:bg-sage/25"
+            className="rounded bg-stoneware-green px-5 py-3 text-[10px] uppercase tracking-widest text-canvas transition-opacity hover:opacity-80"
           >
-            Start Stripe Subscription
+            Start subscription
           </button>
           <button
             type="button"
             onClick={openBillingPortal}
-            className="rounded-lg border border-crusoe/40 bg-crusoe/15 px-4 py-2 text-sm font-medium text-crusoe transition hover:bg-crusoe/25"
+            className="rounded bg-stoneware-turquoise px-5 py-3 text-[10px] uppercase tracking-widest text-ink transition-opacity hover:opacity-80"
           >
-            Open Stripe Customer Portal
+            Billing portal
           </button>
-          {status ? <span className="text-xs text-floral/60">{status}</span> : null}
+          {status ? (
+            <span className="text-xs font-light text-ink-muted">
+              {status}
+            </span>
+          ) : null}
         </div>
       </form>
     </section>

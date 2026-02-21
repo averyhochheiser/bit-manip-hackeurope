@@ -11,32 +11,37 @@ export function DashboardLayout({
   subtitle: string;
 }) {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-gate-bg text-floral">
-      <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
-      <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6 lg:px-8">
-        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+    <main className="relative min-h-screen bg-canvas text-ink">
+      <div className="mx-auto max-w-7xl px-6 pb-24 pt-16 lg:px-12">
+        <header className="mb-16 flex flex-wrap items-end justify-between gap-6">
           <div>
-            <p className="font-display text-xs font-medium uppercase tracking-[0.22em] text-floral/55">Carbon Gate</p>
-            <h1 className="mt-2 font-display text-3xl font-bold text-floral">{title}</h1>
-            <p className="mt-2 text-sm text-floral/65">{subtitle}</p>
+            <p className="text-[10px] uppercase tracking-widest text-ink-muted">
+              Carbon Gate
+            </p>
+            <h1 className="mt-4 text-2xl font-normal tracking-tight text-ink">
+              {title}
+            </h1>
+            <p className="mt-2 text-sm font-light text-ink-muted">
+              {subtitle}
+            </p>
           </div>
-          <nav className="flex items-center gap-2">
+          <nav className="flex items-center gap-3">
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-2 rounded-lg border border-floral/15 bg-floral/5 px-3 py-2 text-sm text-floral/85"
+              className="inline-flex items-center gap-2 rounded border-[0.5px] border-border-subtle px-4 py-2.5 text-[10px] uppercase tracking-widest text-ink-muted transition-colors hover:bg-canvas-raised"
             >
-              <ShieldCheck size={16} />
+              <ShieldCheck size={14} strokeWidth={1} />
               Dashboard
             </Link>
             <Link
               href="/settings"
-              className="inline-flex items-center gap-2 rounded-lg border border-floral/15 bg-floral/5 px-3 py-2 text-sm text-floral/85"
+              className="inline-flex items-center gap-2 rounded border-[0.5px] border-border-subtle px-4 py-2.5 text-[10px] uppercase tracking-widest text-ink-muted transition-colors hover:bg-canvas-raised"
             >
-              <Settings size={16} />
+              <Settings size={14} strokeWidth={1} />
               Settings
             </Link>
-            <div className="inline-flex items-center gap-2 rounded-lg border border-sage/30 bg-sage/10 px-3 py-2 text-xs text-sage">
-              <Leaf size={14} />
+            <div className="inline-flex items-center gap-2 rounded border-[0.5px] border-stoneware-green/30 bg-stoneware-green/5 px-4 py-2.5 text-[10px] uppercase tracking-widest text-stoneware-green">
+              <Leaf size={14} strokeWidth={1} />
               EU CBAM aligned
             </div>
           </nav>

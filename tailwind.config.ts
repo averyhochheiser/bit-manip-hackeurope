@@ -9,40 +9,36 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        crusoe: "#98D2EB",
-        sage: "#69995D",
-        mauve: "#533745",
-        floral: "#FFF8F0",
-        gate: {
-          bg: "#23282E",
-          panel: "#2A3038"
+        canvas: {
+          DEFAULT: "#F5F3F0",
+          raised: "#EDEAE6"
+        },
+        ink: {
+          DEFAULT: "#3A3A38",
+          muted: "#8A8885",
+          faint: "#B5B3B0"
+        },
+        stoneware: {
+          turquoise: "#98D2EB",
+          pink: "#C4A4A7",
+          green: "#69995D",
+          bordeaux: "#533745"
+        },
+        border: {
+          subtle: "#E0DDD9",
+          DEFAULT: "#D6D3CF"
         }
       },
-      boxShadow: {
-        insetGlow: "inset 0 0.5px 0 0 rgba(255,248,240,0.1)",
-        panel: "0 24px 60px rgba(0,0,0,0.35)"
-      },
-      backgroundImage: {
-        noise:
-          "radial-gradient(circle at 20% 20%, rgba(152,210,235,0.06), transparent 35%), radial-gradient(circle at 80% 0%, rgba(105,153,93,0.04), transparent 25%)"
-      },
       fontFamily: {
-        display: [
-          "var(--font-display)",
+        sans: [
+          "var(--font-sans)",
           "Inter",
           "system-ui",
           "-apple-system",
           "Segoe UI",
           "sans-serif"
         ],
-        serif: [
-          "var(--font-serif)",
-          "Playfair Display",
-          "Georgia",
-          "Cambria",
-          "serif"
-        ],
-        monoData: [
+        mono: [
           "var(--font-mono)",
           "JetBrains Mono",
           "ui-monospace",
@@ -50,6 +46,10 @@ const config: Config = {
           "Menlo",
           "monospace"
         ]
+      },
+      spacing: {
+        18: "4.5rem",
+        22: "5.5rem"
       }
     }
   },

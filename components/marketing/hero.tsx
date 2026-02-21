@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, MessageCircle } from "lucide-react";
-
-/* ── Scramble animation ───────────────────────────────────────────── */
+import { ArrowRight } from "lucide-react";
 
 const GLYPHS = "αβγδεζθλμπσφψ∑∏∫∂√∞≈≠±×÷∆01{}[]<>~#";
 const PUE_EQUATION = "PUE(t) = 1 + (Q_cooling / P_IT)";
@@ -74,32 +72,27 @@ function useTextScramble(
   return text;
 }
 
-/* ── Framer variants ──────────────────────────────────────────────── */
-
-const cardVariants = {
-  hidden: { opacity: 0, y: 50 },
+const containerVariants = {
+  hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    y: 0,
     transition: {
-      duration: 0.85,
+      duration: 0.8,
       ease: [0.22, 1, 0.36, 1] as const,
-      staggerChildren: 0.14,
-      delayChildren: 0.3
+      staggerChildren: 0.12,
+      delayChildren: 0.2
     }
   }
 };
 
 const child = {
-  hidden: { opacity: 0, y: 18 },
+  hidden: { opacity: 0, y: 16 },
   visible: {
     opacity: 1,
     y: 0,
     transition: { duration: 0.6, ease: "easeOut" as const }
   }
 };
-
-/* ── Component ────────────────────────────────────────────────────── */
 
 export function Hero() {
   const headline = useTextScramble(PUE_EQUATION, FINAL_HEADLINE, {
@@ -109,83 +102,51 @@ export function Hero() {
   });
 
   return (
-    <section className="relative h-screen w-full overflow-hidden">
-      {/* Background image */}
-      <img
-        src="/design-bg.jpg"
-        alt=""
-        className="absolute inset-0 h-full w-full object-cover"
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-[#23282E]/20 via-transparent to-[#23282E]/55" />
-
-      {/* Floating card — absolute centered */}
-      <div className="absolute left-1/2 top-1/2 w-[90%] max-w-5xl -translate-x-1/2 -translate-y-1/2">
-        <motion.div
-          className="flex flex-col justify-between rounded-3xl bg-[#FFF8F0] p-8 text-[#23282E] shadow-[0_20px_50px_rgba(0,0,0,0.3)] md:aspect-[16/10] md:p-12"
-          variants={cardVariants}
-          initial="hidden"
-          animate="visible"
+    <section className="relative flex min-h-screen items-center justify-center bg-canvas px-6">
+      <motion.div
+        className="mx-auto flex max-w-3xl flex-col items-center text-center"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.p
+          variants={child}
+          className="text-[10px] uppercase tracking-widest text-stoneware-green"
         >
-          {/* ── Top: Typography ── */}
-          <div>
-            <motion.p
-              variants={child}
-              className="mb-5 text-[10px] font-medium uppercase tracking-[0.25em] text-[#69995D]"
-            >
-              Physics-driven carbon intelligence
-            </motion.p>
+          Physics-driven carbon intelligence
+        </motion.p>
 
-            {/* Typography 1 — Scramble headline */}
-            <motion.h1
-              variants={child}
-              className="font-display text-3xl font-bold leading-[1.08] tracking-tight text-[#23282E] sm:text-4xl md:text-5xl lg:text-6xl"
-            >
-              {headline}
-            </motion.h1>
+        <motion.h1
+          variants={child}
+          className="mt-8 text-4xl font-normal leading-[1.1] tracking-tight text-ink sm:text-5xl lg:text-6xl"
+        >
+          {headline}
+        </motion.h1>
 
-            {/* Typography 2 — Serif sub-headline */}
-            <motion.p
-              variants={child}
-              className="mt-5 max-w-lg font-serif text-base leading-relaxed text-[#23282E]/60 sm:text-lg md:text-xl"
-            >
-              Sustainability is now a first-class citizen of CI/CD.
-            </motion.p>
-          </div>
+        <motion.p
+          variants={child}
+          className="mt-8 max-w-lg text-base font-light leading-relaxed text-ink-muted"
+        >
+          Sustainability is now a first-class citizen of CI/CD.
+        </motion.p>
 
-          {/* ── Bottom: Button + Metadata ── */}
-          <div>
-            {/* Action row — button & chat icon pinned right */}
-            <motion.div
-              variants={child}
-              className="mb-5 flex items-center justify-end gap-3"
-            >
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-2.5 rounded-full bg-[#23282E] px-8 py-4 font-medium text-[#FFF8F0] transition-all hover:scale-105 hover:bg-[#98D2EB] hover:text-[#23282E]"
-              >
-                Open Dashboard
-                <ArrowRight size={16} />
-              </Link>
-              <button
-                className="flex h-12 w-12 items-center justify-center rounded-full border border-[#23282E]/10 text-[#23282E]/45 transition hover:bg-[#23282E]/[0.04] hover:text-[#23282E]/70"
-                aria-label="Open chat"
-              >
-                <MessageCircle size={18} />
-              </button>
-            </motion.div>
-
-            {/* Physics metadata footer */}
-            <motion.div
-              variants={child}
-              className="border-t border-[#23282E]/8 pt-3"
-            >
-              <span className="font-monoData text-[11px] text-[#23282E]/28">
-                ΔF = α · ln(C / C₀)
-              </span>
-            </motion.div>
-          </div>
+        <motion.div variants={child} className="mt-12 flex items-center gap-4">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-2.5 rounded bg-ink px-8 py-4 text-[10px] uppercase tracking-widest text-canvas transition-opacity hover:opacity-80"
+          >
+            Open Dashboard
+            <ArrowRight size={14} strokeWidth={1} />
+          </Link>
         </motion.div>
-      </div>
+
+        <motion.p
+          variants={child}
+          className="mt-16 font-mono text-[10px] text-ink-faint"
+        >
+          ΔF = α · ln(C / C₀)
+        </motion.p>
+      </motion.div>
     </section>
   );
 }
