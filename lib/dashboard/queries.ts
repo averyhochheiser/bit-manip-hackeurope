@@ -168,5 +168,115 @@ export async function getOrgRepos(orgId: string): Promise<string[]> {
   return unique;
 }
 
+/**
+ * Global aggregate across ALL orgs — powers the marketing page preview.
+ * Falls back to MOCK_DASHBOARD when no real gate events exist yet.
+ */
+export async function getGlobalDashboardPreview(): Promise<DashboardReadModel> {
+  try {
+    const { data: rawEvents } = await supabaseAdmin
+      .from("gate_events")
+      .select(
+        "id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at, contributor"
+      )
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (!rawEvents || rawEvents.length === 0) {
+      // No live data yet — show mock so the preview isn't blank
+      const { MOCK_DASHBOARD } = await import("./mock-data");
+      return MOCK_DASHBOARD;
+    }
+
+    const gateEvents: GateEventRow[] = rawEvents.map((r: GateEventDbRow & { contributor?: string }) => ({
+      id: r.id,
+      prNumber: r.pr_number,
+      repo: r.repo,
+      branch: r.contributor ?? "—",
+      kgCO2e: r.emissions_kg,
+      status: r.status === "pass" ? "Passed" as const : "Rerouted to Crusoe" as const,
+      emittedAt: r.created_at,
+    }));
+
+    const totalEmissions = gateEvents.reduce((s, e) => s + e.kgCO2e, 0);
+    const crusoeSavings = gateEvents
+      .filter((e) => e.status === "Rerouted to Crusoe")
+      .reduce((s, e) => s + e.kgCO2e * 0.88, 0);
+    const reroutedCount = gateEvents.filter((e) => e.status === "Rerouted to Crusoe").length;
+    const uniqueRepos = new Set(gateEvents.map((e) => e.repo));
+
+    const kpis: KpiItem[] = [
+      {
+        label: "Emissions this month",
+        value: `${round1(totalEmissions)} kgCO₂eq`,
+        delta: `across ${uniqueRepos.size} repos`,
+        deltaPositive: false,
+      },
+      {
+        label: "Gates triggered",
+        value: String(gateEvents.length),
+        delta: `${reroutedCount} rerouted to Crusoe`,
+        deltaPositive: false,
+      },
+      {
+        label: "Crusoe saves",
+        value: `${round1(crusoeSavings)} kgCO₂eq`,
+        delta: "if rerouted",
+        deltaPositive: true,
+      },
+      {
+        label: "Carbon overage cost",
+        value: "$0.00",
+        delta: "within budget",
+        deltaPositive: true,
+      },
+    ];
+
+    const budgetKg = 50;
+    const projectedKg = (() => {
+      const day = new Date().getDate();
+      return day > 0 ? (totalEmissions / day) * 30 : totalEmissions;
+    })();
+
+    // Repo-level aggregation
+    const repoMap = new Map<string, { used: number; count: number }>();
+    gateEvents.forEach((ev) => {
+      const entry = repoMap.get(ev.repo) || { used: 0, count: 0 };
+      entry.used += ev.kgCO2e;
+      entry.count += 1;
+      repoMap.set(ev.repo, entry);
+    });
+
+    const repoReports: RepoReport[] = Array.from(repoMap.entries()).map(([name, stats]) => ({
+      repo: name,
+      usedKg: round1(stats.used),
+      budgetKg: 20.0,
+      topContributor: "PR Author",
+      totalGatesRun: stats.count,
+    }));
+
+    return {
+      kpis,
+      budget: {
+        usedKg: round1(totalEmissions),
+        includedKg: budgetKg,
+        projectedKg: round1(projectedKg),
+        warningPct: 80,
+      },
+      billing: {
+        unitPrice: 2.0,
+        estimatedOverageKg: round2(Math.max(0, totalEmissions - budgetKg)),
+        estimatedCharge: round2(Math.max(0, (totalEmissions - budgetKg) * 2.0)),
+      },
+      gateEvents: gateEvents.slice(0, 5),
+      repoReports,
+    };
+  } catch (err) {
+    console.error("[dashboard] global preview failed, using mock:", err);
+    const { MOCK_DASHBOARD } = await import("./mock-data");
+    return MOCK_DASHBOARD;
+  }
+}
+
 function round1(n: number) { return Math.round(n * 10) / 10; }
 function round2(n: number) { return Math.round(n * 100) / 100; }

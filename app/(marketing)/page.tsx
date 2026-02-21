@@ -4,6 +4,7 @@ import { DashboardPreview } from "@/components/marketing/dashboard-preview";
 import { Footer } from "@/components/marketing/footer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getOrgLeaderboard } from "@/lib/leaderboard/queries";
+import { getGlobalDashboardPreview } from "@/lib/dashboard/queries";
 import { Trophy, Zap, LogOut } from "lucide-react";
 import Link from "next/link";
 // Note: /leaderboard links use <a> tags because the typed-routes cache doesn't include the new page yet
@@ -13,7 +14,10 @@ export default async function MarketingPage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Show top 5 orgs on the marketing page leaderboard teaser
-  const topOrgs = await getOrgLeaderboard().then(r => r.slice(0, 5)).catch(() => []);
+  const [topOrgs, dashboardData] = await Promise.all([
+    getOrgLeaderboard().then(r => r.slice(0, 5)).catch(() => []),
+    getGlobalDashboardPreview(),
+  ]);
 
   return (
     <main className="relative min-h-screen bg-[#23282E] overflow-x-hidden">
@@ -91,7 +95,7 @@ export default async function MarketingPage() {
 
         {/* Dashboard preview */}
         <div className="relative mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
-          <DashboardPreview />
+          <DashboardPreview data={dashboardData} />
         </div>
 
         {/* Leaderboard teaser */}
