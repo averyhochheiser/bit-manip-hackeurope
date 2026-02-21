@@ -133,47 +133,85 @@ interface GateResult {
   totalEmissions: number;
 }
 
+interface RawGateEvent {
+  id: string;
+  repo: string;
+  pr_number: number;
+  emissions_kg: number;
+  status: string;
+  created_at: string;
+  contributor?: string;
+}
+
 async function fetchGateEvents(orgId: string | null, username: string): Promise<GateResult> {
   try {
-    let query = supabaseAdmin
-      .from("gate_events")
-      .select(
-        "id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at, contributor"
-      )
-      .order("created_at", { ascending: false })
-      .limit(50);
+    // Two queries in parallel:
+    // 1. Events for the user's own org (if they have one)
+    // 2. Events where the user is listed as contributor (cross-org — covers PRs to other orgs' repos)
+    const queries: Promise<{ data: RawGateEvent[] | null }>[] = [];
 
     if (orgId) {
-      query = query.eq("org_id", orgId);
+      queries.push(
+        (async () => {
+          const { data } = await supabaseAdmin
+            .from("gate_events")
+            .select("id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at, contributor")
+            .eq("org_id", orgId)
+            .order("created_at", { ascending: false })
+            .limit(50);
+          return { data: data as RawGateEvent[] | null };
+        })()
+      );
     }
 
-    const { data: rawEvents } = await query;
+    if (username) {
+      queries.push(
+        (async () => {
+          const { data } = await supabaseAdmin
+            .from("gate_events")
+            .select("id, repo, pr_number, gpu, region, emissions_kg, crusoe_emissions_kg, status, created_at, contributor")
+            .eq("contributor", username)
+            .order("created_at", { ascending: false })
+            .limit(50);
+          return { data: data as RawGateEvent[] | null };
+        })()
+      );
+    }
 
-    if (!rawEvents || rawEvents.length === 0) {
+    const results = await Promise.all(queries);
+
+    // Merge and deduplicate by event id
+    const seen = new Set<string>();
+    const allRaw: RawGateEvent[] = [];
+    for (const { data } of results) {
+      if (data) {
+        for (const row of data) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            allRaw.push(row);
+          }
+        }
+      }
+    }
+
+    // Sort by most recent first
+    allRaw.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    if (allRaw.length === 0) {
       return { events: [], totalEmissions: 0 };
     }
 
-    const events: GateEventRow[] = rawEvents.map(
-      (r: {
-        id: string;
-        repo: string;
-        pr_number: number;
-        emissions_kg: number;
-        status: string;
-        created_at: string;
-        contributor?: string;
-      }) => ({
-        id: r.id,
-        prNumber: r.pr_number,
-        repo: r.repo,
-        branch: r.contributor ?? "—",
-        kgCO2e: r.emissions_kg,
-        status: (r.status === "pass" ? "Passed" : "Rerouted to Crusoe") as
-          | "Passed"
-          | "Rerouted to Crusoe",
-        emittedAt: r.created_at,
-      })
-    );
+    const events: GateEventRow[] = allRaw.map((r) => ({
+      id: r.id,
+      prNumber: r.pr_number,
+      repo: r.repo,
+      branch: r.contributor ?? "—",
+      kgCO2e: r.emissions_kg,
+      status: (r.status === "pass" ? "Passed" : "Rerouted to Crusoe") as
+        | "Passed"
+        | "Rerouted to Crusoe",
+      emittedAt: r.created_at,
+    }));
 
     const totalEmissions = events.reduce((s, e) => s + e.kgCO2e, 0);
     return { events, totalEmissions };
