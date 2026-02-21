@@ -17,7 +17,7 @@ def simulate_model_training(epochs=100, batch_size=32):
     - JAX optimization
     """
     print("=" * 80)
-    print("🚀 Starting ML Model Training")
+    print("Starting ML Model Training")
     print("=" * 80)
     print(f"Configuration:")
     print(f"  Epochs: {epochs}")
@@ -43,25 +43,25 @@ def simulate_model_training(epochs=100, batch_size=32):
     
     print()
     print("=" * 80)
-    print("✅ Training Complete!")
+    print("[SUCCESS] Training Complete!")
     print("=" * 80)
     print(f"Final Accuracy: {accuracy:.2%}")
     print(f"Final Loss: {train_loss:.4f}")
     print()
-    print("💾 Saving model checkpoint...")
-    print("✅ Model saved to: ./checkpoints/model_final.pth")
+    print("Saving model checkpoint...")
+    print("[OK] Model saved to: ./checkpoints/model_final.pth")
     print()
-    print("📊 Training Statistics:")
+    print("Training Statistics:")
     print(f"  Total epochs: {epochs}")
     print(f"  Total batches processed: {epochs * 100}")  # Simulated
     print(f"  GPU hours (estimated): 4.0")
-    print(f"  Carbon emissions (estimated): ~3.2 kgCO₂eq")
+    print(f"  Carbon emissions (estimated): ~3.2 kgCO2eq")
     print()
 
 
 if __name__ == "__main__":
     print("""
-    🌍 CARBON GATE DEMO - ML Training Job
+    CARBON GATE DEMO - ML Training Job
     
     This training job will:
     1. Trigger the Carbon Gate GitHub Action on PR

@@ -1,38 +1,38 @@
-name: 'Carbon Gate'
-description: 'Estimate carbon emissions of ML training jobs and gate PR merges based on configurable thresholds'
-author: 'Carbon Gate Team'
+name: "Carbon Gate"
+description: "Estimate carbon emissions of ML training jobs and gate PR merges based on configurable thresholds"
+author: "Carbon Gate Team"
 branding:
-  icon: 'cloud'
-  color: 'green'
+  icon: "cloud"
+  color: "green"
 
 inputs:
   github-token:
-    description: 'GitHub token for posting PR comments'
+    description: "GitHub token for posting PR comments"
     required: true
   api-endpoint:
-    description: 'Carbon Gate API endpoint URL'
+    description: "Carbon Gate API endpoint URL"
     required: true
-    default: 'https://carbon-gate.vercel.app'
+    default: "https://carbon-gate.vercel.app"
   org-api-key:
-    description: 'Organization API key for Carbon Gate'
+    description: "Organization API key for Carbon Gate"
     required: true
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Checkout code
       uses: actions/checkout@v3
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
-        
+        python-version: "3.10"
+
     - name: Install dependencies
       shell: bash
       run: |
         pip install requests pyyaml
-        
+
     - name: Run Carbon Gate check
       shell: bash
       env:
