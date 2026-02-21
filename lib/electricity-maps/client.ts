@@ -8,14 +8,16 @@
  * Without the key the static fallback is used automatically.
  */
 
-// Static average carbon intensities (gCO₂eq/kWh) — Electricity Maps 2024 data
+// Static average carbon intensities (gCO₂eq/kWh)
+// eu-west-1 (Ireland) derived from Electricity Maps 5-min dataset, full year 2025 (105,120 rows)
+// All others from Electricity Maps 2024 regional averages
 const STATIC_INTENSITY: Record<string, number> = {
   "us-east-1":      386, // N. Virginia  — PJM grid, gas-heavy
   "us-east-2":      488, // Ohio         — MISO, coal-heavy
   "us-west-1":      246, // N. California— CISO, gas + solar
   "us-west-2":      136, // Oregon       — BPAT, hydro-heavy
   "ca-central-1":    30, // Canada       — hydro-dominant
-  "eu-west-1":      291, // Ireland      — gas + wind
+  "eu-west-1":      299, // Ireland      — gas + wind (2025 mean, lifecycle)
   "eu-west-2":      228, // London       — mixed, improving
   "eu-west-3":       60, // Paris        — nuclear-heavy
   "eu-central-1":   337, // Frankfurt    — coal + gas
@@ -30,6 +32,31 @@ const STATIC_INTENSITY: Record<string, number> = {
   "me-south-1":     627, // Bahrain      — gas-heavy
   "af-south-1":     728, // Cape Town    — coal-heavy
 };
+
+/**
+ * Real hourly carbon intensity profiles (gCO₂eq/kWh, lifecycle, UTC hour index 0–23).
+ * Ireland (IE / eu-west-1): derived from Electricity Maps 5-min dataset, full year 2025.
+ * Source: snapshots_2026-02-10_IE-2025-5_minute.csv
+ *
+ * Pattern: cleanest 01:00–03:00 UTC (wind-heavy overnight, ~283 g)
+ *          dirtiest 17:00–19:00 UTC (evening demand peak, ~325–329 g)
+ */
+export const ZONE_HOURLY_PROFILES: Record<string, number[]> = {
+  IE: [287, 285, 283, 284, 289, 297, 304, 309, 307, 301, 296, 290, 285, 282, 285, 294, 309, 323, 329, 327, 318, 307, 295, 290],
+};
+
+/** Zone hourly profile keyed by cloud region slug */
+const REGION_HOURLY_PROFILES: Record<string, number[]> = {
+  "eu-west-1": ZONE_HOURLY_PROFILES.IE,
+};
+
+/**
+ * Returns the 24-hour intensity profile (UTC) for a region, or null if unavailable.
+ * Index 0 = 00:00 UTC, index 23 = 23:00 UTC.
+ */
+export function getHourlyProfile(region: string): number[] | null {
+  return REGION_HOURLY_PROFILES[region] ?? null;
+}
 
 // Map cloud region slug → Electricity Maps zone code
 const REGION_TO_ZONE: Record<string, string> = {
