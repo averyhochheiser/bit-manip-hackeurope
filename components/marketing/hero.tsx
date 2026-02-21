@@ -236,7 +236,7 @@ export function Hero() {
                 {/* Eyebrow */}
                 <motion.div
                   variants={item}
-                  className="mb-6 flex items-center gap-3"
+                  className="mb-3 flex items-center gap-3"
                 >
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-sage">
                     <Zap size={10} />
@@ -245,10 +245,10 @@ export function Hero() {
                 </motion.div>
 
                 {/* Headline Container — stable height to prevent layout jumps during scramble */}
-                <div className="flex min-h-[140px] items-center sm:min-h-[160px] md:min-h-[220px] lg:min-h-[280px]">
+                <div className="flex min-h-[80px] items-center sm:min-h-[96px] md:min-h-[120px] lg:min-h-[144px]">
                   <motion.h1
                     variants={item}
-                    className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-[#23282E] sm:text-5xl md:text-6xl lg:text-7xl"
+                    className="font-display text-3xl font-bold leading-[1.05] tracking-tight text-[#23282E] sm:text-4xl md:text-5xl lg:text-6xl"
                   >
                     {headline}
                   </motion.h1>
@@ -257,7 +257,7 @@ export function Hero() {
                 {/* Subheading */}
                 <motion.p
                   variants={item}
-                  className="mt-6 max-w-xl font-serif text-lg leading-relaxed text-[#23282E]/55 sm:text-xl"
+                  className="mt-4 max-w-xl font-serif text-lg leading-relaxed text-[#23282E]/55 sm:text-xl"
                 >
                   One platform to track, enforce, and reduce your
                   organisation&apos;s carbon footprint across every GitHub repo
@@ -338,31 +338,37 @@ export function Hero() {
         </div>
 
         {/* Bottom feature pills — Infinite Marquee */}
-        <div className="relative flex w-full overflow-hidden pb-10">
+        <div
+          className="relative flex w-full overflow-hidden pb-10"
+          style={{
+            maskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)',
+            WebkitMaskImage: 'linear-gradient(to right, transparent, black 25%, black 75%, transparent)'
+          }}
+        >
           <motion.div
             animate={{
-              x: [0, -1000],
+              x: [0, -1200],
             }}
             transition={{
-              duration: 25,
+              duration: 20,
               repeat: Infinity,
               ease: "linear",
             }}
-            className="flex flex-nowrap items-center gap-6 text-[11px] uppercase tracking-[0.14em] text-floral/50 whitespace-nowrap"
+            className="flex flex-nowrap items-center gap-10 text-[11px] uppercase tracking-[0.14em] text-floral/40 whitespace-nowrap"
           >
             {/* Group of 3 (Repeated for infinite effect) */}
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="flex gap-6">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
-                  <Shield size={10} />
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex gap-10">
+                <span className="inline-flex items-center gap-2 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
+                  <Shield size={10} className="text-sage" />
                   Per-repo budgets
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
-                  <BarChart3 size={10} />
+                <span className="inline-flex items-center gap-2 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
+                  <BarChart3 size={10} className="text-sage" />
                   EU CBAM aligned
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
-                  <Zap size={10} />
+                <span className="inline-flex items-center gap-2 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
+                  <Zap size={10} className="text-sage" />
                   Fourier carbon forecasting
                 </span>
               </div>

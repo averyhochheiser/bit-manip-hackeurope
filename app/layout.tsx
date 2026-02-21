@@ -32,7 +32,7 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${playfair.variable} ${jetbrains.variable}`}
     >
-      <body className="bg-gate-bg font-display antialiased">{children}</body>
+      <body className="bg-gate-bg font-display antialiased overflow-x-hidden">{children}</body>
     </html>
   );
 }
