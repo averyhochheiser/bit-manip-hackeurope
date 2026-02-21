@@ -14,16 +14,16 @@ type GateHistoryTableProps = {
 
 export function GateHistoryTable({ events }: GateHistoryTableProps) {
   return (
-    <div className="rounded border-[0.5px] border-border-subtle bg-canvas-raised px-8 py-10">
-      <div className="mb-8 flex items-center justify-between">
-        <h3 className="text-[10px] uppercase tracking-widest text-ink-muted">
+    <div className="relative flex h-full flex-col bg-canvas-raised p-6 lg:p-10">
+      <div className="mb-12 flex items-center justify-between">
+        <h3 className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-ink-muted lg:left-10 lg:top-10">
           Gate Check History
         </h3>
-        <span className="rounded border-[0.5px] border-border-subtle px-3 py-1.5 text-[10px] uppercase tracking-widest text-ink-faint">
+        <span className="absolute right-6 top-6 lg:right-10 lg:top-10 border-[0.5px] border-border-subtle bg-canvas px-3 py-1.5 text-[10px] uppercase tracking-widest text-ink-faint">
           Last {events.length} checks
         </span>
       </div>
-      <div className="overflow-hidden rounded border-[0.5px] border-border-subtle">
+      <div className="mt-6 flex-1 overflow-hidden border-[0.5px] border-border-subtle">
         <table className="w-full text-left text-sm font-light">
           <thead className="bg-canvas text-[10px] uppercase tracking-widest text-ink-muted">
             <tr>
@@ -50,11 +50,10 @@ export function GateHistoryTable({ events }: GateHistoryTableProps) {
                 </td>
                 <td className="px-5 py-4">
                   <span
-                    className={`rounded px-2.5 py-1 text-[10px] uppercase tracking-widest ${
-                      event.status === "Passed"
+                    className={`px-2.5 py-1 text-[10px] uppercase tracking-widest ${event.status === "Passed"
                         ? "border-[0.5px] border-stoneware-green/30 bg-stoneware-green/5 text-stoneware-green"
                         : "border-[0.5px] border-stoneware-turquoise/30 bg-stoneware-turquoise/10 text-stoneware-turquoise"
-                    }`}
+                      }`}
                   >
                     {event.status}
                   </span>

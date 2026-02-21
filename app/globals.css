@@ -8,8 +8,8 @@
 
 html,
 body {
-  background: #f5f3f0;
-  color: #3a3a38;
+  background-color: #F5F5F3;
+  color: #1a1a1a;
 }
 
 body {
@@ -21,7 +21,7 @@ body {
 .panel {
   border-radius: 0.25rem;
   border: 0.5px solid #e0ddd9;
-  background: #edeae6;
+  background-color: #F5F5F3;
 }
 
 .panel-muted {

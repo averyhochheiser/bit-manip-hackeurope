@@ -23,16 +23,11 @@ export function ForecastCard() {
   );
 
   return (
-    <section className="rounded border-[0.5px] border-border-subtle bg-canvas-raised px-8 py-10">
-      <div className="mb-8 flex items-center justify-between">
-        <h3 className="text-[10px] uppercase tracking-widest text-ink-muted">
-          Carbon Intensity Forecast
-        </h3>
-        <span className="text-[10px] uppercase tracking-widest text-ink-faint">
-          Ireland · 2025
-        </span>
-      </div>
-      <div className="flex h-20 items-end gap-[3px]">
+    <section className="relative flex h-full flex-col justify-between bg-canvas-raised p-6 lg:p-10">
+      <h3 className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-ink-muted lg:left-10 lg:top-10">
+        Carbon Intensity Forecast
+      </h3>
+      <div className="mt-16 flex items-end gap-[3px] h-32 lg:mt-auto">
         {IE_PROFILE.map((point, index) => {
           const height = Math.max(8, ((point - min) / (max - min)) * 100);
           const isCurrent = index === nowHour;
@@ -40,13 +35,12 @@ export function ForecastCard() {
           return (
             <div key={index} className="relative flex-1">
               <div
-                className={`absolute bottom-0 w-full rounded-sm ${
-                  isOptimal
+                className={`absolute bottom-0 w-full rounded-sm ${isOptimal
                     ? "bg-stoneware-green"
                     : isCurrent
                       ? "bg-stoneware-turquoise"
                       : "bg-border"
-                }`}
+                  }`}
                 style={{ height: `${height}%` }}
               />
             </div>

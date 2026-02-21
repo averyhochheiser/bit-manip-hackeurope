@@ -5,6 +5,9 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 
+import { LiquidText } from "@/components/ui/liquid-text";
+import { ElasticButton } from "@/components/ui/elastic-button";
+
 const GLYPHS = "αβγδεζθλμπσφψ∑∏∫∂√∞≈≠±×÷∆01{}[]<>~#";
 const PUE_EQUATION = "PUE(t) = 1 + (Q_cooling / P_IT)";
 const FINAL_HEADLINE = "The Invisible Footprint.";
@@ -102,51 +105,53 @@ export function Hero() {
   });
 
   return (
-    <section className="relative flex min-h-screen items-center justify-center bg-canvas px-6">
-      <motion.div
-        className="mx-auto flex max-w-3xl flex-col items-center text-center"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        <motion.p
-          variants={child}
-          className="text-[10px] uppercase tracking-widest text-stoneware-green"
-        >
+    <section className="col-span-1 grid min-h-[80vh] grid-cols-1 border-b-[0.5px] border-border-subtle lg:grid-cols-2">
+      {/* Primary Headline Grid Cell */}
+      <div className="relative flex flex-col items-center justify-end text-center border-b-[0.5px] border-border-subtle p-6 lg:border-b-0 lg:border-r-[0.5px] lg:p-12">
+        <p className="absolute left-0 top-6 w-full lg:top-12 text-[10px] uppercase tracking-widest text-stoneware-green">
           Physics-driven carbon intelligence
-        </motion.p>
-
+        </p>
         <motion.h1
           variants={child}
-          className="mt-8 text-4xl font-normal leading-[1.1] tracking-tight text-ink sm:text-5xl lg:text-6xl"
+          initial="hidden"
+          animate="visible"
+          className="max-w-xl text-5xl font-normal leading-[0.95] tracking-tight text-ink lg:text-7xl"
         >
-          {headline}
+          <LiquidText text={headline} />
         </motion.h1>
+      </div>
 
+      {/* Auxiliary Info Grid Cell */}
+      <div className="relative flex flex-col items-center justify-between text-center bg-canvas p-6 lg:bg-transparent lg:p-12">
         <motion.p
           variants={child}
-          className="mt-8 max-w-lg text-base font-light leading-relaxed text-ink-muted"
+          initial="hidden"
+          animate="visible"
+          className="max-w-sm mx-auto text-lg font-light leading-snug text-ink-muted"
         >
           Sustainability is now a first-class citizen of CI/CD.
         </motion.p>
 
-        <motion.div variants={child} className="mt-12 flex items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2.5 rounded bg-ink px-8 py-4 text-[10px] uppercase tracking-widest text-canvas transition-opacity hover:opacity-80"
-          >
-            Open Dashboard
-            <ArrowRight size={14} strokeWidth={1} />
-          </Link>
-        </motion.div>
+        <div className="mt-16 flex flex-col items-center gap-12 lg:mt-auto">
+          <motion.div variants={child} initial="hidden" animate="visible">
+            <Link href="/dashboard">
+              <ElasticButton className="inline-flex items-center gap-2.5 rounded-none border-[0.5px] border-ink bg-transparent px-8 py-4 text-[10px] uppercase tracking-widest text-ink transition-colors hover:bg-ink hover:text-canvas">
+                Open Dashboard
+                <ArrowRight size={14} strokeWidth={1} />
+              </ElasticButton>
+            </Link>
+          </motion.div>
 
-        <motion.p
-          variants={child}
-          className="mt-16 font-mono text-[10px] text-ink-faint"
-        >
-          ΔF = α · ln(C / C₀)
-        </motion.p>
-      </motion.div>
+          <motion.p
+            variants={child}
+            initial="hidden"
+            animate="visible"
+            className="font-mono text-[10px] tracking-widest text-ink-faint"
+          >
+            ΔF = α · ln(C / C₀)
+          </motion.p>
+        </div>
+      </div>
     </section>
   );
 }

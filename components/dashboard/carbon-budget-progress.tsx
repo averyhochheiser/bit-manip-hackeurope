@@ -29,17 +29,17 @@ export function CarbonBudgetProgressBar({
   const overageKg = Math.max(0, usedKg - safeBudget);
 
   return (
-    <section className="rounded border-[0.5px] border-border-subtle bg-canvas-raised px-8 py-10">
+    <section className="relative flex h-full flex-col justify-between bg-canvas-raised p-6 lg:p-10">
       <div className="flex items-start justify-between gap-6">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-ink-muted">
+          <p className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-ink-muted lg:left-10 lg:top-10">
             Carbon Budget
           </p>
-          <h3 className="mt-3 text-lg font-normal text-ink">
+          <h3 className="mt-16 text-lg font-normal text-ink">
             Budget Utilization
           </h3>
         </div>
-        <p className="font-mono text-lg font-light text-ink">
+        <p className="mt-16 font-mono text-lg font-light text-ink lg:mt-0">
           {pct.toFixed(1)}%
         </p>
       </div>
@@ -58,11 +58,11 @@ export function CarbonBudgetProgressBar({
             {usedKg.toFixed(2)}kg / {safeBudget.toFixed(2)}kg
           </p>
           {overageKg > 0 ? (
-            <span className="rounded border-[0.5px] border-stoneware-bordeaux/30 bg-stoneware-bordeaux/5 px-3 py-1.5 text-[10px] uppercase tracking-widest text-stoneware-bordeaux">
+            <span className="border-[0.5px] border-stoneware-bordeaux/30 bg-stoneware-bordeaux/5 px-3 py-1.5 text-[10px] uppercase tracking-widest text-stoneware-bordeaux">
               Reroute active · +{overageKg.toFixed(2)}kg
             </span>
           ) : (
-            <span className="rounded border-[0.5px] border-border-subtle px-3 py-1.5 text-[10px] uppercase tracking-widest text-ink-muted">
+            <span className="border-[0.5px] border-border-subtle px-3 py-1.5 text-[10px] uppercase tracking-widest text-ink-muted bg-canvas">
               On policy budget
             </span>
           )}

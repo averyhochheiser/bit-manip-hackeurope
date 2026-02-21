@@ -1,7 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { LiquidText } from "@/components/ui/liquid-text";
 
+// ... existing points ...
 const points = [
   {
     title: "CI/CD Enforcement, not dashboard theater",
@@ -19,23 +21,41 @@ const points = [
 
 export function WhyDifferent() {
   return (
-    <section className="relative py-24">
-      <div className="mb-12">
-        <p className="text-[10px] uppercase tracking-widest text-ink-muted">
+    <section className="grid grid-cols-1 border-b-[0.5px] border-border-subtle lg:grid-cols-12">
+      {/* Left Text/Image Cell */}
+      <div className="relative flex flex-col items-center text-center border-b-[0.5px] border-border-subtle p-6 lg:col-span-5 lg:border-b-0 lg:border-r-[0.5px] lg:p-12">
+        <p className="absolute left-0 top-6 w-full text-[10px] uppercase tracking-widest text-ink-muted lg:top-12">
           Why we are different
         </p>
-        <h2 className="mt-4 text-2xl font-normal tracking-tight text-ink">
-          Built for enforcement and accountability
-        </h2>
+
+        <div className="mt-24 flex flex-col items-center w-full">
+          <h2 className="text-4xl font-normal leading-none tracking-tight text-ink sm:text-5xl">
+            <LiquidText text="Built for enforcement and accountability." />
+          </h2>
+
+          <div className="mt-16 flex flex-wrap justify-center gap-4 text-[10px] uppercase tracking-widest text-ink-faint">
+            <span className="border-[0.5px] border-border-subtle bg-canvas-raised px-4 py-2">
+              Radiative Forcing Modeled
+            </span>
+            <span className="border-[0.5px] border-border-subtle bg-canvas-raised px-4 py-2">
+              Embodied Carbon Aware
+            </span>
+            <span className="border-[0.5px] border-border-subtle bg-canvas-raised px-4 py-2">
+              Fourier Carbon Forecasting
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* Right Grid of Points */}
+      <div className="grid grid-cols-1 lg:col-span-7 lg:grid-cols-2">
         {points.map((point, index) => (
           <motion.article
             key={point.title}
-            className="rounded border-[0.5px] border-border-subtle bg-canvas-raised px-8 py-10"
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            className={`flex flex-col items-center text-center border-b-[0.5px] border-border-subtle bg-canvas p-6 lg:p-12 ${index % 2 === 0 ? "lg:border-r-[0.5px]" : ""
+              } ${index === points.length - 1 ? "lg:border-b-0" : ""}`}
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
             viewport={{ once: true, amount: 0.35 }}
             transition={{
               delay: index * 0.08,
@@ -43,24 +63,25 @@ export function WhyDifferent() {
               ease: "easeOut"
             }}
           >
-            <h3 className="text-base font-normal text-ink">{point.title}</h3>
+            <p className="text-[10px] uppercase tracking-widest text-ink-muted">
+              Point {String(index + 1).padStart(2, "0")}
+            </p>
+            <h3 className="mt-12 text-xl font-normal leading-tight text-ink lg:mt-24">{point.title}</h3>
             <p className="mt-4 text-sm font-light leading-relaxed text-ink-muted">
               {point.copy}
             </p>
           </motion.article>
         ))}
-      </div>
-
-      <div className="mt-10 flex flex-wrap gap-4 text-[10px] uppercase tracking-widest text-ink-faint">
-        <span className="rounded border-[0.5px] border-border-subtle px-4 py-2">
-          Radiative Forcing Modeled
-        </span>
-        <span className="rounded border-[0.5px] border-border-subtle px-4 py-2">
-          Embodied Carbon Aware
-        </span>
-        <span className="rounded border-[0.5px] border-border-subtle px-4 py-2">
-          Fourier Carbon Forecasting
-        </span>
+        {/* Placeholder image block to fill the odd grid cell space */}
+        {points.length % 2 !== 0 && (
+          <div className="relative min-h-[300px] border-b-[0.5px] border-border-subtle bg-border-subtle lg:border-b-0">
+            <img
+              src="/hero-bg.jpg"
+              alt="Data center servers"
+              className="absolute inset-0 h-full w-full object-cover object-center grayscale opacity-80 mix-blend-multiply"
+            />
+          </div>
+        )}
       </div>
     </section>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { CustomCursor } from "@/components/ui/inverted-cursor";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,7 +27,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrains.variable}`}>
-      <body className="bg-canvas font-sans font-light antialiased">
+      <body className="font-sans font-light antialiased">
+        <CustomCursor />
+        {/* The Substrate Background */}
+        <div className="fixed inset-0 -z-10 h-full w-full bg-ink">
+          <img
+            src="/design-bg.jpg"
+            alt="Substrate Texture"
+            className="h-full w-full object-cover object-center grayscale opacity-15 mix-blend-screen"
+          />
+        </div>
         {children}
       </body>
     </html>

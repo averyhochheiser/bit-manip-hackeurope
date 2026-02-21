@@ -4,23 +4,27 @@ type KpiStripProps = {
 
 export function KpiStrip({ kpis }: KpiStripProps) {
   return (
-    <section className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-      {kpis.map((kpi) => (
+    <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 w-full">
+      {kpis.map((kpi, index) => (
         <article
           key={kpi.label}
-          className="rounded border-[0.5px] border-border-subtle bg-canvas-raised px-6 py-8"
+          className={`relative flex flex-col justify-end bg-canvas-raised p-6 lg:p-8 ${index !== kpis.length - 1 ? "border-b-[0.5px] border-border-subtle xl:border-b-0 xl:border-r-[0.5px]" : ""
+            }`}
+          style={{ minHeight: "160px" }}
         >
-          <p className="text-[10px] uppercase tracking-widest text-ink-muted">
+          <p className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-ink-muted lg:left-8 lg:top-8">
             {kpi.label}
           </p>
-          <p className="mt-4 font-mono text-2xl font-light text-ink">
-            {kpi.value}
-          </p>
-          {kpi.delta ? (
-            <p className="mt-2 text-xs font-light text-ink-muted">
-              {kpi.delta}
+          <div className="mt-auto">
+            <p className="font-mono text-2xl font-light text-ink">
+              {kpi.value}
             </p>
-          ) : null}
+            {kpi.delta ? (
+              <p className="mt-2 text-xs font-light text-ink-muted">
+                {kpi.delta}
+              </p>
+            ) : null}
+          </div>
         </article>
       ))}
     </section>
