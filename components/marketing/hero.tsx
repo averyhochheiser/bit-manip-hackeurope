@@ -181,7 +181,7 @@ const item = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] },
+    transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] as any },
   },
 };
 
@@ -214,7 +214,7 @@ export function Hero() {
       <FloatingParticles />
 
       {/* Content */}
-      <div className="relative flex min-h-screen flex-col">
+      <div className="relative flex min-h-screen flex-col pt-24">
         {/* Main hero content — centered */}
         <div className="flex flex-1 items-center justify-center px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -244,13 +244,15 @@ export function Hero() {
                   </span>
                 </motion.div>
 
-                {/* Headline */}
-                <motion.h1
-                  variants={item}
-                  className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-[#23282E] sm:text-5xl md:text-6xl lg:text-7xl"
-                >
-                  {headline}
-                </motion.h1>
+                {/* Headline Container — stable height to prevent layout jumps during scramble */}
+                <div className="flex min-h-[140px] items-center sm:min-h-[160px] md:min-h-[220px] lg:min-h-[280px]">
+                  <motion.h1
+                    variants={item}
+                    className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-[#23282E] sm:text-5xl md:text-6xl lg:text-7xl"
+                  >
+                    {headline}
+                  </motion.h1>
+                </div>
 
                 {/* Subheading */}
                 <motion.p
@@ -267,16 +269,18 @@ export function Hero() {
                   variants={item}
                   className="mt-10 flex flex-wrap items-center gap-4"
                 >
-                  <Link
-                    href="/dashboard"
+                  <button
+                    onClick={() => {
+                      window.location.href = "/dashboard";
+                    }}
                     className="group inline-flex items-center gap-2.5 rounded-full bg-[#23282E] px-8 py-4 font-semibold text-[#FFF8F0] shadow-lg shadow-[#23282E]/20 transition-all duration-300 hover:scale-[1.03] hover:bg-sage hover:text-white hover:shadow-sage/30"
                   >
-                    Open Dashboard
-                    <ArrowRight
-                      size={16}
-                      className="transition-transform group-hover:translate-x-0.5"
+                    Sign In with GitHub
+                    <Github
+                      size={18}
+                      className="ml-1"
                     />
-                  </Link>
+                  </button>
                   <a
                     href="https://github.com/averyhochheiser/bit-manip-hackeurope"
                     target="_blank"
@@ -333,26 +337,38 @@ export function Hero() {
           </motion.div>
         </div>
 
-        {/* Bottom feature pills */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 2.2, duration: 0.6 }}
-          className="flex flex-wrap items-center justify-center gap-3 pb-10 text-[11px] uppercase tracking-[0.14em] text-floral/50"
-        >
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
-            <Shield size={10} />
-            Per-repo budgets
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
-            <BarChart3 size={10} />
-            EU CBAM aligned
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
-            <Zap size={10} />
-            Fourier carbon forecasting
-          </span>
-        </motion.div>
+        {/* Bottom feature pills — Infinite Marquee */}
+        <div className="relative flex w-full overflow-hidden pb-10">
+          <motion.div
+            animate={{
+              x: [0, -1000],
+            }}
+            transition={{
+              duration: 25,
+              repeat: Infinity,
+              ease: "linear",
+            }}
+            className="flex flex-nowrap items-center gap-6 text-[11px] uppercase tracking-[0.14em] text-floral/50 whitespace-nowrap"
+          >
+            {/* Group of 3 (Repeated for infinite effect) */}
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="flex gap-6">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
+                  <Shield size={10} />
+                  Per-repo budgets
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
+                  <BarChart3 size={10} />
+                  EU CBAM aligned
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-floral/10 bg-floral/[0.03] px-3.5 py-1.5 backdrop-blur-sm">
+                  <Zap size={10} />
+                  Fourier carbon forecasting
+                </span>
+              </div>
+            ))}
+          </motion.div>
+        </div>
       </div>
     </section>
   );

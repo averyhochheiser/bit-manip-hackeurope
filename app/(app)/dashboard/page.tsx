@@ -33,7 +33,7 @@ export default async function DashboardPage() {
             />
           </div>
           <div className="xl:col-span-12">
-            <RepoBreakdown />
+            <RepoBreakdown reports={model.repoReports} />
           </div>
           <div className="xl:col-span-7">
             <GateHistoryTable events={model.gateEvents} />

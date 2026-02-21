@@ -9,38 +9,37 @@ import Link from "next/link";
 export default function MarketingPage() {
   return (
     <main className="relative min-h-screen bg-[#23282E]">
-      {/* Header — floats above the hero background */}
-      <header className="absolute inset-x-0 top-0 z-10 mx-auto flex max-w-7xl items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          <p className="font-display text-xs font-semibold uppercase tracking-[0.2em] text-[#FFF8F0]/70">
-            Carbon Gate
-          </p>
-          <span className="rounded-full border border-sage/30 bg-sage/10 px-2 py-0.5 text-[10px] font-medium text-sage">
-            Beta
-          </span>
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-white/[0.05] bg-[#23282E]/80 backdrop-blur-xl transition-all duration-300">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 sm:px-8 lg:px-12">
+          <div className="flex items-center gap-4">
+            <p className="font-display text-sm font-bold uppercase tracking-[0.25em] text-[#FFF8F0]">
+              Carbon Gate
+            </p>
+            <span className="rounded-full border border-sage/40 bg-sage/20 px-2.5 py-0.5 text-[10px] font-bold text-sage backdrop-blur-md">
+              BETA
+            </span>
+          </div>
+          <nav className="flex items-center gap-8">
+            <Link
+              href="/dashboard"
+              className="text-xs font-semibold uppercase tracking-widest text-[#FFF8F0]/60 transition hover:text-[#FFF8F0]"
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/settings"
+              className="text-xs font-semibold uppercase tracking-widest text-[#FFF8F0]/60 transition hover:text-[#FFF8F0]"
+            >
+              Settings
+            </Link>
+            <Link
+              href="/dashboard"
+              className="hidden sm:inline-flex items-center rounded-full border border-sage/30 bg-sage/10 px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-sage transition hover:bg-sage/20 hover:border-sage/50"
+            >
+              Sign In with GitHub
+            </Link>
+          </nav>
         </div>
-        <nav className="flex items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="text-xs font-medium text-[#FFF8F0]/50 transition hover:text-[#FFF8F0]/90"
-          >
-            Dashboard
-          </Link>
-          <Link
-            href="/settings"
-            className="text-xs font-medium text-[#FFF8F0]/50 transition hover:text-[#FFF8F0]/90"
-          >
-            Settings
-          </Link>
-          <a
-            href="https://github.com/averyhochheiser/bit-manip-hackeurope"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-full border border-[#FFF8F0]/15 bg-[#FFF8F0]/5 px-3 py-1 text-xs text-[#FFF8F0]/75 transition hover:bg-[#FFF8F0]/10"
-          >
-            GitHub ↗
-          </a>
-        </nav>
       </header>
 
       {/* Hero — full-viewport experience */}
