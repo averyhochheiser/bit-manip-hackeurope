@@ -9,6 +9,7 @@ import sys
 import yaml
 import requests
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -1009,6 +1010,7 @@ def call_gate_api(config):
 
 def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: Optional[str] = None, patch_applied: bool = False, suggestions_ai_powered: bool = True):
     """Format the Carbon Gate report as a PR comment with educational, firm tone"""
+    _GPU_TDP_REF = {"H100": 700, "A100": 400, "V100": 300, "A10": 150, "A10G": 150, "T4": 70, "L40": 300}
     emissions = result["emissions_kg"]
     crusoe_emissions = result["crusoe_emissions_kg"]
     status = result["status"]
@@ -1179,7 +1181,7 @@ Running your job when grid carbon intensity is lower can significantly reduce em
         if suggestions_ai_powered:
             _suggestion_note = "> *AI analysis powered by [Crusoe Cloud](https://crusoe.ai) — running on geothermal energy (~5 gCO₂/kWh)*"
         else:
-            _suggestion_note = "> *Recommended optimisations based on your training configuration — powered by [Crusoe Cloud](https://crusoe.ai)*"
+            _suggestion_note = "> *General recommendations based on your config. For **AI-powered code analysis and automatic patches**, add `CRUSOE_API_KEY` — powered by [Crusoe Cloud](https://crusoe.ai) on geothermal energy*"
         comment += f"""---
 
 ### 🧠 Code Efficiency Suggestions
@@ -1262,6 +1264,23 @@ curl -sL "PATCH_URL" | git apply
 1. **✅ Review Code Suggestions** — See the AI-generated efficiency suggestions above. If a patch was auto-applied, review the new commit on this branch.
 2. **⏰ Optimize Timing** — {optimal_window}
 3. **☁️ Switch to Clean Energy** — [Crusoe Cloud](https://crusoe.ai) geothermal infrastructure would cut emissions by {savings_pct}%
+
+"""
+
+    # Crusoe-powered code optimization section
+    comment += f"""---
+
+### 🚀 Crusoe AI Code Optimization
+
+Carbon Gate uses [Crusoe Cloud](https://crusoe.ai)'s AI inference — powered by **100% clean geothermal energy** (~5 gCO₂/kWh vs ~{carbon_intensity} gCO₂/kWh grid average) — to analyse your code and generate efficiency patches.
+
+{'✅ **AI analysis completed** — see suggestions above.' if suggestions_ai_powered else '⚠️ **Static suggestions shown** — AI analysis was unavailable. Add `CRUSOE_API_KEY` as a repository secret for code-specific analysis and auto-patching.'}
+
+**How it works:**
+1. Crusoe AI reviews every changed Python file in your PR
+2. It generates specific, actionable suggestions to reduce compute time
+3. When possible, it creates a unified diff patch and **auto-commits it to your branch**
+4. Re-run the Carbon Gate check to verify reduced emissions
 
 """
 
