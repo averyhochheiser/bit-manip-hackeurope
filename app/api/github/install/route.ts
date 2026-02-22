@@ -21,7 +21,7 @@ permissions:
 jobs:
   carbon-gate:
     runs-on: ubuntu-latest
-    name: carbon emissions
+    name: Check Carbon Emissions
     steps:
       - uses: actions/checkout@v4
         with:

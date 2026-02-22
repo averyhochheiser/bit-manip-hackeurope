@@ -3,9 +3,6 @@ name: Carbon Gate Check
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    paths:
-      - "**.py"
-      - "carbon-gate.yml"
 
 permissions:
   pull-requests: write
