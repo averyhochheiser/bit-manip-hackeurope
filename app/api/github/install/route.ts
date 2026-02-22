@@ -323,6 +323,19 @@ export async function POST(req: Request) {
   const canonicalRepo = repoData.full_name ?? repo;
   const targetBranch = branch ?? repoData.default_branch ?? "main";
 
+  // Check whether the branch actually exists as a ref.
+  // Empty repos have default_branch set but no commits yet, so the ref doesn't exist.
+  // The Contents API returns 404/422 when branch is specified but doesn't exist as a ref.
+  // Omitting branch lets GitHub create the initial commit on HEAD instead.
+  const branchRefRes = await fetch(
+    `https://api.github.com/repos/${canonicalRepo}/git/ref/heads/${targetBranch}`,
+    { headers: { Authorization: `Bearer ${ghToken}`, Accept: "application/vnd.github+json" } },
+  );
+  const branchExists = branchRefRes.ok;
+  await branchRefRes.text().catch(() => {});
+  const commitBranch = branchExists ? targetBranch : undefined;
+  console.log(`[install] branch "${targetBranch}" exists: ${branchExists} → commitBranch: ${commitBranch ?? "(none — empty repo)"}`);
+
   // 4. Get org API key for the user
   const { data: profile } = await supabaseAdmin
     .from("billing_profiles")
@@ -350,7 +363,7 @@ export async function POST(req: Request) {
     ".github/workflows/carbon-gate.yml",
     WORKFLOW_YAML,
     "ci: add Carbon Gate workflow",
-    targetBranch,
+    commitBranch,
   );
 
   if (!workflowResult.ok) {
@@ -364,6 +377,8 @@ export async function POST(req: Request) {
           requestedRepo: repo,
           canonicalRepo,
           targetBranch,
+          branchExists,
+          commitBranch: commitBranch ?? "(none — empty repo)",
           tokenPrefix: ghToken?.slice(0, 8) + "...",
         },
       },
@@ -377,7 +392,7 @@ export async function POST(req: Request) {
     "carbon-gate.yml",
     CONFIG_YAML,
     "chore: add Carbon Gate configuration",
-    targetBranch,
+    commitBranch,
   );
 
   if (!configResult.ok) {
