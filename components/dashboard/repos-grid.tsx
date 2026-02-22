@@ -5,7 +5,24 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ExternalLink, ShieldCheck, GitBranch } from "lucide-react";
 import { InstallCarbonGate } from "./install-carbon-gate";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+const LS_KEY = "carbon-gate-installed-repos";
+
+function getInstalledFromStorage(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveInstalledToStorage(repos: Set<string>) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify([...repos]));
+  } catch {}
+}
 
 type ReposGridProps = {
   activated: RepoReport[];
@@ -16,7 +33,27 @@ export function ReposGrid({ activated, notActivated }: ReposGridProps) {
   const [localActivated, setLocalActivated] = useState<RepoReport[]>(activated);
   const [localNotActivated, setLocalNotActivated] = useState<RepoReport[]>(notActivated);
 
+  // On mount, promote any locally-installed repos that the server still shows as not activated
+  useEffect(() => {
+    const installed = getInstalledFromStorage();
+    if (installed.size === 0) return;
+
+    setLocalNotActivated((prev) => {
+      const toPromote = prev.filter((r) => installed.has(r.repo));
+      if (toPromote.length === 0) return prev;
+      setLocalActivated((act) => [
+        ...act,
+        ...toPromote.map((r) => ({ ...r, hasGateData: true })),
+      ]);
+      return prev.filter((r) => !installed.has(r.repo));
+    });
+  }, []);
+
   function handleInstalled(repoName: string) {
+    const installed = getInstalledFromStorage();
+    installed.add(repoName);
+    saveInstalledToStorage(installed);
+
     setLocalNotActivated((prev) => {
       const repo = prev.find((r) => r.repo === repoName);
       if (repo) {
