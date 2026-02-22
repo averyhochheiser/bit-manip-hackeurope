@@ -34,7 +34,7 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
         } else {
           const hint = data.hint ? ` ${data.hint}` : "";
           const detail = data.details?.length ? ` (${data.details[0].slice(0, 120)})` : "";
-          const debug = data.debug ? `\n\nDebug: scopes="${data.debug.scopes}", push=${data.debug.permissions?.push}, admin=${data.debug.permissions?.admin}, token=${data.debug.tokenPrefix}` : "";
+          const debug = data.debug ? `\n\nDebug: scopes="${data.debug.scopes}", push=${data.debug.permissions?.push}, admin=${data.debug.permissions?.admin}, requested="${data.debug.requestedRepo}", canonical="${data.debug.canonicalRepo}", branch="${data.debug.targetBranch}", token=${data.debug.tokenPrefix}` : "";
           setMessage((data.error ?? "Something went wrong") + hint + detail + debug);
         }
         return;

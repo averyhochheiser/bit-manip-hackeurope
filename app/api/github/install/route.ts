@@ -293,7 +293,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const repoData = (await repoCheck.json()) as { permissions?: { push?: boolean; admin?: boolean } };
+  const repoData = (await repoCheck.json()) as {
+    full_name?: string;
+    default_branch?: string;
+    permissions?: { push?: boolean; admin?: boolean };
+  };
   if (!repoData.permissions?.push && !repoData.permissions?.admin) {
     const [owner] = repo.split("/");
     return NextResponse.json(
@@ -304,6 +308,10 @@ export async function POST(req: Request) {
       { status: 403 },
     );
   }
+
+  // Use canonical repo name and default branch from GitHub's response
+  const canonicalRepo = repoData.full_name ?? repo;
+  const targetBranch = branch ?? repoData.default_branch ?? "main";
 
   // 4. Get org API key for the user
   const { data: profile } = await supabaseAdmin
@@ -328,11 +336,11 @@ export async function POST(req: Request) {
   // 5. Commit files sequentially via Contents API (with conflict retry)
   const workflowResult = await putFile(
     ghToken,
-    repo,
+    canonicalRepo,
     ".github/workflows/carbon-gate.yml",
     WORKFLOW_YAML,
     "ci: add Carbon Gate workflow",
-    branch,
+    targetBranch,
   );
 
   if (!workflowResult.ok) {
@@ -343,8 +351,9 @@ export async function POST(req: Request) {
         debug: {
           scopes,
           permissions: repoData.permissions,
-          repo,
-          tokenPresent: !!ghToken,
+          requestedRepo: repo,
+          canonicalRepo,
+          targetBranch,
           tokenPrefix: ghToken?.slice(0, 8) + "...",
         },
       },
@@ -354,11 +363,11 @@ export async function POST(req: Request) {
 
   const configResult = await putFile(
     ghToken,
-    repo,
+    canonicalRepo,
     "carbon-gate.yml",
     CONFIG_YAML,
     "chore: add Carbon Gate configuration",
-    branch,
+    targetBranch,
   );
 
   if (!configResult.ok) {
@@ -377,7 +386,7 @@ export async function POST(req: Request) {
   let secretCreated = false;
   let secretError: string | undefined;
   if (orgApiKey) {
-    const secretResult = await putSecret(ghToken, repo, "CARBON_GATE_ORG_KEY", orgApiKey);
+    const secretResult = await putSecret(ghToken, canonicalRepo, "CARBON_GATE_ORG_KEY", orgApiKey);
     secretCreated = secretResult.ok;
     if (!secretResult.ok) {
       secretError = secretResult.error;
