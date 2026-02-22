@@ -62,7 +62,7 @@ export function Hero({ isSignedIn = false }: { isSignedIn?: boolean }) {
               {isSignedIn ? (
                 <a
                   href="/dashboard"
-                  className="group inline-flex items-center gap-2.5 rounded-full bg-[#23282E] px-7 py-3.5 text-sm font-semibold text-[#FFF8F0] shadow-lg shadow-[#23282E]/20 transition-all duration-300 hover:scale-[1.03] hover:shadow-stoneware-green/20"
+                  className="group inline-flex items-center gap-2.5 rounded-full bg-white/[0.08] border border-white/[0.12] px-7 py-3.5 text-sm font-semibold text-floral shadow-lg transition-all duration-300 hover:scale-[1.03] hover:bg-white/[0.12]"
                 >
                   Go to Dashboard
                   <ArrowRight size={16} className="ml-1" />
@@ -70,7 +70,7 @@ export function Hero({ isSignedIn = false }: { isSignedIn?: boolean }) {
               ) : (
                 <a
                   href="/api/auth/signin"
-                  className="group inline-flex items-center gap-2.5 rounded-full bg-[#23282E] px-7 py-3.5 text-sm font-semibold text-[#FFF8F0] shadow-lg shadow-[#23282E]/20 transition-all duration-300 hover:scale-[1.03] hover:shadow-stoneware-green/20"
+                  className="group inline-flex items-center gap-2.5 rounded-full bg-white/[0.08] border border-white/[0.12] px-7 py-3.5 text-sm font-semibold text-floral shadow-lg transition-all duration-300 hover:scale-[1.03] hover:bg-white/[0.12]"
                 >
                   Sign In with GitHub
                   <Github size={16} className="ml-1" />
@@ -80,14 +80,14 @@ export function Hero({ isSignedIn = false }: { isSignedIn?: boolean }) {
                 href="https://github.com/averyhochheiser/bit-manip-hackeurope"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-white/30 px-5 py-3 text-sm font-medium text-canvas/60 transition-all hover:border-white/50 hover:text-canvas/90"
+                className="inline-flex items-center gap-2 rounded-full border border-white/[0.15] px-5 py-3 text-sm font-medium text-floral/60 transition-all hover:border-white/30 hover:text-floral/90"
               >
                 <Github size={15} />
                 View on GitHub
               </a>
               <a
                 href="/leaderboard"
-                className="inline-flex items-center gap-2 rounded-full border border-white/30 px-5 py-3 text-sm font-medium text-canvas/60 transition-all hover:border-white/50 hover:text-canvas/90"
+                className="inline-flex items-center gap-2 rounded-full border border-white/[0.15] px-5 py-3 text-sm font-medium text-floral/60 transition-all hover:border-white/30 hover:text-floral/90"
               >
                 <Trophy size={15} />
                 Leaderboard

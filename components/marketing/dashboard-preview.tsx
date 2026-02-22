@@ -42,7 +42,7 @@ export function DashboardPreview({ data }: DashboardPreviewProps) {
     <section className="relative py-16 sm:py-20">
       <div className="mb-12">
         <div className="flex items-center gap-3">
-          <p className="text-[10px] uppercase tracking-widest text-[#FFF8F0]/50">Live dashboard preview</p>
+          <p className="text-[10px] uppercase tracking-widest text-floral/50">Live dashboard preview</p>
           {data.gateEvents.length > 0 && (
             <span className="inline-flex items-center gap-1.5 border-[0.5px] border-stoneware-green/30 px-2.5 py-1 text-[9px] uppercase tracking-widest text-stoneware-green">
               <span className="h-1 w-1 animate-pulse rounded-full bg-stoneware-green" />
@@ -50,7 +50,7 @@ export function DashboardPreview({ data }: DashboardPreviewProps) {
             </span>
           )}
         </div>
-        <h2 className="mt-4 text-3xl font-normal tracking-tight text-[#FFF8F0] sm:text-4xl">
+        <h2 className="mt-4 text-3xl font-normal tracking-tight text-floral sm:text-4xl">
           <TextScramble
             initial="∀ repo ∈ org · Σ CO₂"
             target="Every repo. Every team. One carbon ledger."
@@ -85,23 +85,23 @@ export function DashboardPreview({ data }: DashboardPreviewProps) {
         )}
 
         <ScrollFloat className="xl:col-span-6" delay={0.15}>
-          <div className="grid grid-cols-1 gap-[0.5px] bg-floral/10">
+          <div className="grid grid-cols-1 gap-[0.5px] bg-white/[0.04]">
             {physicsMetrics.map((metric) => (
               <div
                 key={metric.label}
-                className="relative flex flex-col justify-end bg-[#2A2F35] p-6"
+                className="relative flex flex-col justify-end bg-[#16191d] border border-white/[0.06] p-6"
                 style={{ minHeight: "130px" }}
               >
-                <p className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50">
+                <p className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-floral/50">
                   {metric.label}
                 </p>
                 <div className="flex items-baseline justify-between">
                   <p className={`font-mono text-2xl font-light ${metric.color}`}>
                     {metric.value}
                   </p>
-                  <p className="font-mono text-[10px] text-[#FFF8F0]/30">{metric.equation}</p>
+                  <p className="font-mono text-[10px] text-floral/30">{metric.equation}</p>
                 </div>
-                <p className="mt-1 text-[11px] text-[#FFF8F0]/40">{metric.hint}</p>
+                <p className="mt-1 text-[11px] text-floral/40">{metric.hint}</p>
               </div>
             ))}
           </div>
