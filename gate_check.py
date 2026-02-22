@@ -1496,67 +1496,35 @@ def check_sha_paid_override() -> bool:
 
 
 def format_override_section(result):
-    """Generate markdown for override options in PR comment."""
+    """Generate markdown for the pay-to-override section shown in blocked PRs."""
     pr_number = os.environ.get("PR_NUMBER", "")
-    # PR_SHA is the actual head commit SHA set in action.yml;
-    # GITHUB_SHA is the merge commit — use PR_SHA when available.
     sha = os.environ.get("PR_SHA", "") or os.environ.get("GITHUB_SHA", "")
 
-    # Generate a signed pay-to-override link (no ORG_API_KEY required)
     pay_link = generate_sha_override_link(sha, pr_number) if sha else None
 
     if not pay_link:
-        secret_set = bool(os.environ.get("OVERRIDE_SIGNING_SECRET", "").strip())
-        if not secret_set:
+        if not os.environ.get("OVERRIDE_SIGNING_SECRET", "").strip():
             output("OVERRIDE_SIGNING_SECRET is not set — pay-to-override link will not appear in PR comment", "warn")
-        elif not sha:
-            output("No commit SHA found (PR_SHA / GITHUB_SHA) — pay-to-override link skipped", "warn")
-
-    # Optionally enrich with override eligibility info from the billing API
-    override_info = check_override_eligibility({}, result)
 
     lines_out = []
-    lines_out = []
-    lines_out.append("\n\n💳 **Override Options**")
-    lines_out.append("")
 
-    # Show billing API stats when available
-    if override_info:
-        lines_out.append("| Metric | Value |")
-        lines_out.append("|--------|-------|")
-        lines_out.append(f"| Repo usage this month | {override_info.get('repo_usage_kg', 0):.1f} / {override_info.get('hard_cap_kg', 20)} kgCO\u2082 |")
-        lines_out.append(f"| Overrides used | {override_info.get('overrides_used', 0)} / {override_info.get('max_overrides', 5)} |")
+    if pay_link:
+        lines_out.append("")
+        lines_out.append("---")
+        lines_out.append("")
+        lines_out.append("### 💳 Pay to Override")
+        lines_out.append("")
+        lines_out.append(f"> ### 👉 [Click here to pay and unblock this PR →]({pay_link})")
+        lines_out.append("")
+        lines_out.append("One-time payment. After paying, **re-run this check** and it will pass automatically.")
+        lines_out.append("")
+    else:
+        lines_out.append("")
+        lines_out.append("**To unblock:** ask a repo admin to add the `carbon-override` label, or apply the efficiency suggestions above.")
         lines_out.append("")
 
-        if override_info.get("allowed"):
-            otype = override_info.get("override_type")
-            if otype == "admin":
-                lines_out.append("\u2705 **Admin override available** \u2014 Add the `carbon-override` label to this PR to proceed.")
-                lines_out.append("")
-            elif otype == "paid":
-                cost = override_info.get("cost_usd", 0)
-                if pay_link:
-                    lines_out.append(f"\U0001f4b3 **[Pay ${cost:.2f} to override carbon gate \u2192]({pay_link})**")
-                    lines_out.append("")
-                    lines_out.append("> Paying unlocks this PR for 7 days and funds verified carbon offset programs.")
-                    lines_out.append("")
-        else:
-            reason = override_info.get("reason", "Override not available.")
-            lines_out.append(f"\u26d4 **Override not available:** {reason}")
-            lines_out.append("")
-
-    # Pay-to-override CTA when no billing API data (shown whenever a signed link can be generated)
-    if pay_link and not override_info:
-        lines_out.append(f"\U0001f4b3 **[Pay to override carbon gate \u2192]({pay_link})**")
-        lines_out.append("")
-        lines_out.append("> Paying unlocks this PR for 7 days and funds verified carbon offset programs.")
-        lines_out.append("")
-
-    if not pay_link and not override_info:
-        lines_out.append("To unblock this PR: apply the AI code suggestions above, or ask a repo admin to add the `carbon-override` label.")
-        lines_out.append("")
-
-    return "\n".join(lines_out)
+    return "
+".join(lines_out)
 
 
 def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: Optional[str] = None, suggestions_ai_powered: bool = True):
