@@ -1280,16 +1280,16 @@ Running your job when grid carbon intensity is lower can significantly reduce em
         comment += f"""**This PR is currently blocked due to high emissions.** To proceed, you have these options:
 
 1. **Reroute to Crusoe** (Recommended) — Comment `/crusoe-run: [reason]` to use clean energy infrastructure
-2. **Optimize Timing** — {optimal_window}
-3. **Optimize Code** — Reduce training time through efficiency improvements
+2. **Auto-Patch Code** — Comment `/apply-crusoe-patch` to have Crusoe AI automatically optimize your code and commit the changes
+3. **Optimize Timing** — {optimal_window}
 4. **Request Override** — Authorized team members can add the `carbon-override` label with justification
 """
     else:
         comment += f"""Consider these options to reduce environmental impact:
 
 1. **Switch to Clean Energy** — Comment `/crusoe-run: [reason]` to use Crusoe's geothermal infrastructure ({savings_pct}% cleaner)
-2. **Optimize Timing** — {optimal_window}
-3. **Improve Efficiency** — Optimize code to reduce training time
+2. **Auto-Patch Code** — Comment `/apply-crusoe-patch` to have Crusoe AI automatically optimize your code and commit the changes
+3. **Optimize Timing** — {optimal_window}
 
 """
 
