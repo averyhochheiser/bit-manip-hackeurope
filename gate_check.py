@@ -1311,17 +1311,14 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
     output(f"Pay-to-override link: {pay_link}", "info")
 
     if status == "block":
-        status_emoji = "🔴"
         status_label = "BLOCKED"
-        limit_note = f"exceeds {threshold_kg} kg block threshold — merge blocked"
+        limit_note = f"exceeds the {threshold_kg} kg block threshold — merge is blocked"
     elif status == "warn":
-        status_emoji = "🟡"
         status_label = "WARNING"
-        limit_note = f"above {warn_kg} kg warning threshold (block at {threshold_kg} kg)"
+        limit_note = f"above the {warn_kg} kg warning threshold (block threshold: {threshold_kg} kg)"
     else:
-        status_emoji = "🟢"
         status_label = "PASSED"
-        limit_note = f"within limits (warn: {warn_kg} kg, block: {threshold_kg} kg)"
+        limit_note = f"within acceptable limits (warn: {warn_kg} kg, block: {threshold_kg} kg)"
 
     savings_pct = int(((emissions - crusoe_emissions) / emissions) * 100) if emissions > 0 else 0
     gpu_hourly_rate = {"A100": 3.55, "H100": 4.10, "V100": 2.48, "A10": 1.12}
@@ -1333,19 +1330,19 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
 
     # Header + Crusoe comparison table
     pay_cta = f"\n\n**Pay to override:** [Click here to pay and unblock this PR]({pay_link}) — after paying, re-run this check and it will pass." if (status == "block" and pay_link) else ""
-    comment = f"""## {status_emoji} Carbon Gate — {status_label}
+    comment = f"""## Carbon Gate — {status_label}
 
 **{emissions:.2f} kgCO₂eq** — {limit_note}{pay_cta}
 
-[View full report & repo stats →]({dashboard_url})
+[View full emissions report →]({dashboard_url})
 
 ---
 
 | | Current | Crusoe (Geothermal) | |
 |--|---------|---------------------|--|
-| **Emissions** | {emissions:.2f} kgCO₂eq | {crusoe_emissions:.2f} kgCO₂eq | **-{savings_pct}%** ✅ |
-| **Energy** | Grid mix ({carbon_intensity} gCO₂/kWh) | 100% geothermal (5 gCO₂/kWh) | Clean |
-| **Cost** | ${current_cost:.2f} | ${crusoe_cost:.2f} | +{cost_diff_pct:.0f}% |
+| **Emissions** | {emissions:.2f} kgCO₂eq | {crusoe_emissions:.2f} kgCO₂eq | -{savings_pct}% |
+| **Grid intensity** | {carbon_intensity} gCO₂/kWh | 5 gCO₂/kWh (geothermal) | Renewable |
+| **Compute cost** | ${current_cost:.2f} | ${crusoe_cost:.2f} | +{cost_diff_pct:.0f}% |
 
 """
 
@@ -1362,14 +1359,14 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
 
         comment += f"""---
 
-### 🧠 Crusoe AI: {count_str} found
+### Code Efficiency Analysis: {count_str} identified
 
-> *Powered by [{ai_note}](https://crusoe.ai)*
+> *Analysis powered by [{ai_note}](https://crusoe.ai)*
 
-Crusoe analyzed your code and found changes that could reduce compute time and emissions.
-{'A ready-to-apply patch is available.' if has_patch else 'Manual suggestions are available.'}
+Crusoe analyzed this diff and identified changes that could reduce compute time and associated carbon emissions.
+{'A ready-to-apply patch is available.' if has_patch else 'Manual suggestions are provided below.'}
 
-**Comment below — Crusoe will apply the changes and explain what it did:**
+**To apply the suggested changes, comment:**
 ```
 /apply-crusoe-patch
 ```
@@ -1380,7 +1377,7 @@ Crusoe analyzed your code and found changes that could reduce compute time and e
     comment += f"""---
 
 <details>
-<summary>🔍 Technical details & methodology</summary>
+<summary>Technical details and methodology</summary>
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
@@ -1409,7 +1406,7 @@ Crusoe analyzed your code and found changes that could reduce compute time and e
     required_perm = security_config.get("override_permission", "admin")
     timing_note = ""
     if optimal_window and len(optimal_window) > 20 and "no significant" not in optimal_window.lower():
-        timing_note = f" · ⏰ {optimal_window[:80]}"
+        timing_note = f" · Optimal window: {optimal_window[:80]}"
 
     # Override options come BEFORE the <sub> footer tag (HTML breaks Markdown heading rendering)
     if result.get("status") == "block":
@@ -1419,7 +1416,7 @@ Crusoe analyzed your code and found changes that could reduce compute time and e
             print(f"::warning::format_override_section failed: {_e}")
             comment += "\n\n**Override options:** Add the `carbon-override` label, or ask a repo admin.\n\n"
 
-    comment += f"""<sub>[Dashboard →]({dashboard_url}){timing_note} · Override: `{required_perm}` + justification via `carbon-override` label · 🌱</sub>"""
+    comment += f"""<sub>[Dashboard]({dashboard_url}){timing_note} · Override requires `{required_perm}` permission + justification via `carbon-override` label</sub>"""
 
     return comment
 
