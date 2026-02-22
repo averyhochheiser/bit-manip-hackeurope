@@ -1,201 +1,98 @@
 "use client";
 
-import { useRef } from "react";
-import {
-  motion,
-  useReducedMotion,
-  useScroll,
-  useTransform
-} from "framer-motion";
-
-function FourierWave({ progress }: { progress: ReturnType<typeof useTransform<number, number>> }) {
-  return (
-    <motion.svg
-      viewBox="0 0 1200 200"
-      preserveAspectRatio="none"
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-56 w-full opacity-[0.12]"
-      style={{ x: progress }}
-    >
-      <path
-        d="M0,120 C100,60 200,180 300,100 C400,20 500,160 600,100 C700,40 800,170 900,90 C1000,10 1100,150 1200,100"
-        fill="none"
-        stroke="#98D2EB"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M0,140 C120,80 240,190 360,120 C480,50 600,175 720,110 C840,45 960,180 1080,100 L1200,120"
-        fill="none"
-        stroke="#98D2EB"
-        strokeWidth="0.8"
-        opacity="0.5"
-      />
-    </motion.svg>
-  );
-}
-
-type ChapterProps = {
-  children: React.ReactNode;
-  opacity: ReturnType<typeof useTransform<number, number>>;
-  y: ReturnType<typeof useTransform<number, number>>;
-  className?: string;
-};
-
-function Chapter({ children, opacity, y, className }: ChapterProps) {
-  return (
-    <motion.div
-      className={`pointer-events-none sticky top-0 flex min-h-screen flex-col items-center justify-center px-4 ${className || ""}`}
-      style={{
-        opacity,
-        y,
-        maskImage: "linear-gradient(to bottom, transparent 0%, black 14%, black 100%)",
-        WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 14%, black 100%)",
-      }}
-    >
-      {children}
-    </motion.div>
-  );
-}
+import { motion } from "framer-motion";
+import { LiquidText } from "@/components/ui/liquid-text";
+import { TextScramble } from "@/components/ui/text-scramble";
 
 export function StorySection() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const reducedMotion = useReducedMotion();
-
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start start", "end end"]
-  });
-
-  // Each chapter: fade-in over ~4% → hold for ~18% → fade-out/fly-up over ~5%
-  // Section is 600vh so 1% ≈ 6vh — each chapter gets ~150vh of readable screen.
-  const EXIT_Y = reducedMotion ? 0 : -600;
-
-  const ch1Opacity = useTransform(scrollYProgress, [0, 0.04, 0.22, 0.28], [0, 1, 1, 0]);
-  const ch1Y = useTransform(scrollYProgress, [0, 0.04, 0.22, 0.28], [reducedMotion ? 0 : 24, 0, 0, EXIT_Y]);
-
-  const ch2Opacity = useTransform(scrollYProgress, [0.24, 0.29, 0.47, 0.53], [0, 1, 1, 0]);
-  const ch2Y = useTransform(scrollYProgress, [0.24, 0.29, 0.47, 0.53], [reducedMotion ? 0 : 24, 0, 0, EXIT_Y]);
-
-  const ch3Opacity = useTransform(scrollYProgress, [0.49, 0.54, 0.72, 0.78], [0, 1, 1, 0]);
-  const ch3Y = useTransform(scrollYProgress, [0.49, 0.54, 0.72, 0.78], [reducedMotion ? 0 : 24, 0, 0, EXIT_Y]);
-
-  const ch4Opacity = useTransform(scrollYProgress, [0.74, 0.79, 0.96, 1], [0, 1, 1, 0.85]);
-  const ch4Y = useTransform(scrollYProgress, [0.74, 0.79, 1], [reducedMotion ? 0 : 24, 0, 0]);
-
-  const sageBg = useTransform(
-    scrollYProgress,
-    [0, 0.04, 0.18, 0.24],
-    ["rgba(105,153,93,0)", "rgba(105,153,93,0.06)", "rgba(105,153,93,0.06)", "rgba(105,153,93,0)"]
-  );
-
-  const waveX = useTransform(scrollYProgress, [0, 1], [0, reducedMotion ? 0 : -180]);
-
   return (
-    <section ref={containerRef} className="relative" style={{ height: "600vh" }}>
-      <motion.div
-        className="pointer-events-none sticky top-0 h-screen w-full overflow-hidden"
-        style={{ backgroundColor: sageBg }}
-      >
-        <FourierWave progress={waveX} />
-      </motion.div>
-
-      {/* Chapter 1: The Invisible Footprint */}
-      <Chapter opacity={ch1Opacity} y={ch1Y}>
-        <p className="mb-4 text-xs uppercase tracking-[0.25em] text-sage">The invisible footprint</p>
-        <h2 className="max-w-4xl text-balance text-center font-display text-5xl font-bold leading-[1.1] text-floral sm:text-6xl lg:text-8xl">
-          Every training run leaves a trace.
-        </h2>
-        <p className="mt-6 max-w-xl text-center text-base text-floral/50">
-          GPU hours become kilowatt-hours become kilograms of CO&#x2082;. Most teams never see it.
-        </p>
-      </Chapter>
-
-      {/* Chapter 2: Physics Over Guesswork */}
-      <Chapter opacity={ch2Opacity} y={ch2Y}>
-        <p className="mb-4 text-xs uppercase tracking-[0.25em] text-crusoe">Physics over guesswork</p>
-        <h2 className="max-w-4xl text-balance text-center font-display text-5xl font-bold leading-[1.1] text-floral sm:text-6xl lg:text-8xl">
-          Standard models guess. We calculate.
-        </h2>
-        <div className="mt-10 flex flex-wrap justify-center gap-6">
-          <motion.div
-            className="panel-muted max-w-xs p-5"
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1, duration: 0.4 }}
-          >
-            <p className="text-xs uppercase tracking-[0.18em] text-floral/50">Dynamic PUE</p>
-            <p className="mt-2 font-monoData text-lg text-floral/85">
-              1 + Q<sub>cooling</sub> / P<sub>IT</sub>
-            </p>
-            <p className="mt-2 text-xs text-floral/45">
-              Efficiency that breathes with the ambient air.
-            </p>
-          </motion.div>
-          <motion.div
-            className="panel-muted max-w-xs p-5"
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.2, duration: 0.4 }}
-          >
-            <p className="text-xs uppercase tracking-[0.18em] text-floral/50">Fourier Carbon Intensity</p>
-            <p className="mt-2 font-monoData text-lg text-floral/85">
-              CI(t) = &Sigma; a&#x2099; cos(n&omega;t + &phi;&#x2099;)
-            </p>
-            <p className="mt-2 text-xs text-floral/45">
-              Grid carbon oscillates. We model the harmonics.
-            </p>
-          </motion.div>
-          <motion.div
-            className="panel-muted max-w-xs p-5"
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.3, duration: 0.4 }}
-          >
-            <p className="text-xs uppercase tracking-[0.18em] text-floral/50">Radiative Forcing</p>
-            <p className="mt-2 font-monoData text-lg text-floral/85">
-              &Delta;F = &alpha; &middot; ln(C / C&#x2080;)
-            </p>
-            <p className="mt-2 text-xs text-floral/45">
-              Your emissions shift the atmosphere&apos;s energy balance.
-            </p>
-          </motion.div>
+    <section className="flex flex-col bg-[#23282E]">
+      {/* Chapter 1: The Invisible Footprint (Inverted) */}
+      <div className="w-full flex justify-center py-32 px-6 bg-[#98D2EB]">
+        <div className="max-w-4xl w-full flex flex-col items-center text-center">
+          <p className="font-mono text-xs tracking-widest text-[#23282E]/50 uppercase mb-8">
+            <TextScramble initial="01 / init_sequence" target="01 / The Invisible Footprint" holdMs={600} scrambleMs={1200} />
+          </p>
+          <h2 className="text-4xl lg:text-7xl font-normal leading-[1.05] tracking-tight text-[#23282E]">
+            Every training run leaves a trace.
+          </h2>
+          <p className="mt-12 text-lg lg:text-xl font-light leading-relaxed text-[#23282E]/70 max-w-2xl">
+            GPU hours become kilowatt-hours become kilograms of CO&#x2082;. Most
+            teams never see it.
+          </p>
         </div>
-        <p className="mt-6 max-w-md text-center text-sm italic text-floral/35">
-          150kg CO&#x2082; of embodied carbon before the first line of code.
-        </p>
-      </Chapter>
+      </div>
 
-      {/* Chapter 3: The Solution */}
-      <Chapter opacity={ch3Opacity} y={ch3Y}>
-        <p className="mb-4 text-xs uppercase tracking-[0.25em] text-floral/40">The solution</p>
-        <h2 className="max-w-4xl text-balance text-center font-display text-5xl font-bold leading-[1.1] text-floral sm:text-6xl lg:text-8xl">
-          Harnessing wasted energy for clean compute.
-        </h2>
-        <p className="mt-6 max-w-xl text-center text-base text-floral/50">
-          Crusoe repurposes stranded gas into GPU cycles. Carbon Gate routes your dirtiest workloads
-          there automatically, cutting emissions up to 88%.
-        </p>
-      </Chapter>
+      {/* Massive Editorial Image removed to become Hero background */}
+      <div className="w-full flex justify-center py-32 px-6">
+        <div className="max-w-6xl w-full flex flex-col items-center">
+          <p className="font-mono text-xs tracking-widest text-[#FFF8F0]/50 uppercase mb-12">
+            <TextScramble initial="02 / sys_analysis" target="02 / Physics Focus" holdMs={600} scrambleMs={1200} />
+          </p>
+          <h2 className="max-w-5xl text-4xl lg:text-6xl font-normal text-center leading-[1.05] tracking-tight text-[#FFF8F0]">
+            Standard models guess. We calculate.
+          </h2>
 
-      {/* Chapter 4: The Gate */}
-      <Chapter opacity={ch4Opacity} y={ch4Y}>
-        <p className="mb-4 text-xs uppercase tracking-[0.25em] text-crusoe">The gate</p>
-        <h2 className="max-w-4xl text-balance text-center font-display text-5xl font-bold leading-[1.1] text-floral sm:text-6xl lg:text-8xl">
-          Policy enforced on every&nbsp;
-          <span className="text-crusoe">PR.</span>
-        </h2>
-        <p className="mt-6 max-w-xl text-center text-base text-floral/50">
-          Pass, warn, or reroute. The dashboard below is not a mockup.
-        </p>
-        <div className="pointer-events-auto mt-8">
-          <span className="inline-flex items-center gap-2 rounded-full border border-crusoe/30 bg-crusoe/10 px-4 py-1.5 text-xs font-medium text-crusoe">
-            <span className="h-1.5 w-1.5 rounded-full bg-crusoe" />
-            Gate active
-          </span>
+          <div className="mt-32 grid w-full grid-cols-1 md:grid-cols-3 gap-16 lg:gap-24">
+            <div className="flex flex-col">
+              <span className="h-[1px] w-full bg-[#FFF8F0]/20 mb-8"></span>
+              <p className="text-xs tracking-widest text-[#FFF8F0]/50 uppercase mb-6">
+                Dynamic PUE
+              </p>
+              <p className="font-mono text-xl lg:text-2xl font-light text-[#FFF8F0] mb-6">1 + Q<sub>c</sub> / P<sub>it</sub></p>
+              <p className="text-base font-light leading-relaxed text-[#FFF8F0]/70">Efficiency that breathes with the ambient air precisely.</p>
+            </div>
+            <div className="flex flex-col">
+              <span className="h-[1px] w-full bg-[#FFF8F0]/20 mb-8"></span>
+              <p className="text-xs tracking-widest text-[#FFF8F0]/50 uppercase mb-6">
+                Fourier CI
+              </p>
+              <p className="font-mono text-xl lg:text-2xl font-light text-[#FFF8F0] mb-6">CI(t) = &Sigma; a&#x2099; cos(n&omega;t)</p>
+              <p className="text-base font-light leading-relaxed text-[#FFF8F0]/70">Grid carbon oscillates. We model the deep harmonics.</p>
+            </div>
+            <div className="flex flex-col">
+              <span className="h-[1px] w-full bg-[#FFF8F0]/20 mb-8"></span>
+              <p className="text-xs tracking-widest text-[#FFF8F0]/50 uppercase mb-6">
+                Radiative Forcing
+              </p>
+              <p className="font-mono text-xl lg:text-2xl font-light text-[#FFF8F0] mb-6">&Delta;F = &alpha; &middot; ln(C/C&#x2080;)</p>
+              <p className="text-base font-light leading-relaxed text-[#FFF8F0]/70">Calculated energy shift of the atmosphere&apos;s balance.</p>
+            </div>
+          </div>
         </div>
-      </Chapter>
+      </div>
+
+      {/* Chapter 3 & 4 */}
+      <div className="w-full bg-stoneware-green text-white">
+        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-32 py-32 px-6 lg:px-12">
+
+          <div className="flex-1 flex flex-col">
+            <p className="font-mono text-xs tracking-widest text-white/50 uppercase mb-8">
+              <TextScramble initial="03 / optimization" target="03 / The Solution" holdMs={600} scrambleMs={1200} />
+            </p>
+            <h2 className="text-4xl lg:text-5xl font-normal leading-[1.1] tracking-tight text-white mb-8">
+              Harnessing wasted energy for clean compute.
+            </h2>
+            <p className="text-lg font-light leading-relaxed text-white/70 max-w-lg">
+              Crusoe repurposes stranded gas into GPU cycles. Carbon Gate routes your
+              dirtiest workloads there automatically, cutting emissions up to 88%.
+            </p>
+          </div>
+
+          <div className="flex-1 flex flex-col items-start lg:items-end text-left lg:text-right mt-16 lg:mt-0">
+            <p className="font-mono text-xs tracking-widest text-[#FFF8F0] uppercase mb-8">
+              <TextScramble initial="04 / execution" target="04 / The Gate" holdMs={600} scrambleMs={1200} />
+            </p>
+            <h2 className="text-4xl lg:text-5xl font-normal leading-[1.1] tracking-tight text-white mb-8">
+              Policy enforced on every PR.
+            </h2>
+            <p className="text-lg font-light leading-relaxed text-white/70 max-w-lg">
+              Pass, warn, or reroute. The live dashboard below is not a mockup.
+            </p>
+          </div>
+
+        </div>
+      </div>
     </section>
   );
 }

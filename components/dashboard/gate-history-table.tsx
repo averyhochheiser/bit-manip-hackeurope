@@ -1,8 +1,5 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
-
 export type GateEvent = {
   id: string;
   prNumber: number;
@@ -19,64 +16,52 @@ type GateHistoryTableProps = {
 
 export function GateHistoryTable({ events }: GateHistoryTableProps) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-md">
-      <div className="mb-6 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-floral">Gate Check History</h3>
-        <span className="rounded-full border border-white/[0.08] bg-white/[0.05] px-3 py-1 text-[10px] uppercase tracking-widest text-floral/40">
+    <div className="relative flex h-full flex-col bg-[#2A2F35] p-6 lg:p-10">
+      <div className="mb-12 flex items-center justify-between">
+        <h3 className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50 lg:left-10 lg:top-10">
+          Gate Check History
+        </h3>
+        <span className="absolute right-6 top-6 lg:right-10 lg:top-10 border-[0.5px] border-[#FFF8F0]/10 bg-[#23282E] px-3 py-1.5 text-[10px] uppercase tracking-widest text-[#FFF8F0]/30">
           Last {events.length} checks
         </span>
       </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm border-collapse">
-          <thead className="border-b border-white/[0.05] text-[10px] uppercase tracking-[0.2em] text-floral/30">
+      <div className="mt-6 flex-1 overflow-hidden border-[0.5px] border-[#FFF8F0]/10">
+        <table className="w-full text-left text-sm font-light">
+          <thead className="bg-[#23282E] text-[10px] uppercase tracking-widest text-[#FFF8F0]/50">
             <tr>
-              <th className="pb-4 pr-4 pl-0 font-medium">PR</th>
-              <th className="pb-4 px-4 font-medium">Repository / Branch</th>
-              <th className="pb-4 px-4 font-medium">Footprint</th>
-              <th className="pb-4 pl-4 font-medium text-right">Status</th>
+              <th className="px-5 py-4 font-normal">PR</th>
+              <th className="px-5 py-4 font-normal">Repo</th>
+              <th className="px-5 py-4 font-normal">kgCO2e</th>
+              <th className="px-5 py-4 font-normal">Status</th>
+              <th className="px-5 py-4 font-normal">Time</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/[0.03]">
-            {events.map((event, i) => (
-              <motion.tr
+          <tbody>
+            {events.map((event) => (
+              <tr
                 key={event.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="group transition-colors hover:bg-white/[0.02]"
+                className="border-t border-[#FFF8F0]/10 text-[#FFF8F0]"
               >
-                <td className="py-4 pr-4 font-monoData text-floral/90">
-                  <span className="text-floral/30">#</span>{event.prNumber}
+                <td className="px-5 py-4 font-mono">#{event.prNumber}</td>
+                <td className="px-5 py-4">
+                  <p>{event.repo}</p>
+                  <p className="text-xs text-[#FFF8F0]/50">{event.branch}</p>
                 </td>
-                <td className="py-4 px-4">
-                  <div className="flex flex-col">
-                    <span className="font-semibold text-floral/90">{event.repo}</span>
-                    <span className="text-[11px] font-monoData text-floral/30">{event.branch}</span>
-                  </div>
+                <td className="px-5 py-4 font-mono">
+                  {event.kgCO2e.toFixed(2)}
                 </td>
-                <td className="py-4 px-4">
-                  <div className="flex items-baseline gap-1">
-                    <span className="font-monoData text-base font-medium text-floral">
-                      {event.kgCO2e.toFixed(2)}
-                    </span>
-                    <span className="text-[10px] text-floral/30 uppercase tracking-tighter">kgCO₂e</span>
-                  </div>
-                </td>
-                <td className="py-4 pl-4 text-right">
+                <td className="px-5 py-4">
                   <span
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
-                      event.status === "Passed"
-                        ? "border border-sage/20 bg-sage/10 text-sage"
-                        : "border border-crusoe/20 bg-crusoe/10 text-crusoe"
-                    )}
+                    className={`px-2.5 py-1 text-[10px] uppercase tracking-widest ${event.status === "Passed"
+                      ? "border-[0.5px] border-stoneware-green/30 bg-stoneware-green/10 text-stoneware-green"
+                      : "border-[0.5px] border-stoneware-turquoise/30 bg-stoneware-turquoise/10 text-stoneware-turquoise"
+                      }`}
                   >
-                    <span className={cn("h-1 w-1 rounded-full", event.status === "Passed" ? "bg-sage" : "bg-crusoe")} />
                     {event.status}
                   </span>
                 </td>
-              </motion.tr>
+                <td className="px-5 py-4 text-[#FFF8F0]/50">{event.emittedAt}</td>
+              </tr>
             ))}
           </tbody>
         </table>

@@ -5,9 +5,7 @@ Reads carbon-gate.yml config, calls API, and posts PR comment
 """
 
 import os
-import re
 import sys
-import base64
 import yaml
 import requests
 import json
@@ -65,14 +63,7 @@ def output(message: str, level: str = "info", data: Optional[Dict] = None):
 
 
 def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
-    """
-    Fetch changed Python files from the PR.
-
-    Returns a string with two sections per file:
-      1. The unified diff (so the LLM understands what changed).
-      2. The **full current source** fetched via the Git Blobs API
-         (so the LLM can quote verbatim lines for the <carbon_patch> <old> block).
-    """
+    """Fetch changed Python files from the PR and return a formatted diff string."""
     github_token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
@@ -100,47 +91,12 @@ def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
         for f in python_files[:10]:  # cap at 10 files
             filename = f["filename"]
             patch = f.get("patch", "")
-            blob_sha = f.get("sha", "")
             if not patch:
                 continue
-
             snippet = patch[:max_chars_per_file]
-            section = f"### {filename}\n```diff\n{snippet}\n```"
-
-            # Fetch the actual file source via the Git Blobs API so the LLM
-            # can generate a verbatim <old> block (the diff format with +/- prefixes
-            # cannot be used directly for string-replacement matching).
-            if blob_sha:
-                try:
-                    blob_resp = requests.get(
-                        f"https://api.github.com/repos/{repo}/git/blobs/{blob_sha}",
-                        headers=headers,
-                        timeout=10,
-                    )
-                    if blob_resp.ok:
-                        blob_data = blob_resp.json()
-                        raw = blob_data.get("content", "")
-                        encoding = blob_data.get("encoding", "base64")
-                        if encoding == "base64":
-                            file_src = base64.b64decode(
-                                raw.replace("\n", "").encode()
-                            ).decode("utf-8", errors="replace")
-                        else:
-                            file_src = raw
-                        # Truncate long files — keep first 3 000 chars of source
-                        src_preview = file_src[:3000]
-                        section += (
-                            f"\n\n**Current source of `{filename}`"
-                            f" (quote these lines verbatim in `<old>`):**\n"
-                            f"```python\n{src_preview}\n```"
-                        )
-                        total_chars += len(src_preview)
-                except Exception as e:
-                    output(f"Could not fetch blob for {filename}: {e}", "warn")
-
-            diff_parts.append(section)
+            diff_parts.append(f"### {filename}\n```diff\n{snippet}\n```")
             total_chars += len(snippet)
-            if total_chars >= 12000:
+            if total_chars >= 8000:
                 break
 
         return "\n\n".join(diff_parts) if diff_parts else None
@@ -752,8 +708,6 @@ def parse_carbon_patch(text: str) -> Optional[Dict[str, str]]:
     )
     if not m:
         return None
-    # Strip leading/trailing newlines only — preserves meaningful indentation
-    # inside the block while preventing spurious whitespace mismatches.
     return {
         "file": m.group(1).strip(),
         "old": m.group(2).strip("\n"),
@@ -792,7 +746,6 @@ def get_pr_branch() -> Optional[str]:
         r.raise_for_status()
         data = r.json()
 
-        # Detect fork PRs — GITHUB_TOKEN cannot write to a contributor's fork.
         head_full = (data.get("head", {}).get("repo") or {}).get("full_name", "")
         base_full = (data.get("base", {}).get("repo") or {}).get("full_name", "")
         if head_full and base_full and head_full != base_full:
@@ -808,75 +761,6 @@ def get_pr_branch() -> Optional[str]:
     except Exception as e:
         output(f"Could not fetch PR branch: {e}", "warn")
         return None
-
-
-def apply_patch_to_pr(
-    file_path: str, old_code: str, new_code: str, branch: str
-) -> bool:
-    """
-    Apply a text replacement to a file on the PR branch using the GitHub
-    Contents API, committing the result directly.
-
-    Returns True on success, False on any failure (so callers can fall back
-    gracefully to just posting the suggestion as a comment).
-    """
-    github_token = os.environ.get("GITHUB_TOKEN")
-    repo = os.environ.get("GITHUB_REPOSITORY")
-    if not github_token or not repo:
-        return False
-
-    headers = {
-        "Authorization": f"Bearer {github_token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-
-    # 1. Fetch current file content + SHA
-    url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
-    try:
-        r = requests.get(url, params={"ref": branch}, headers=headers, timeout=15)
-        r.raise_for_status()
-        payload = r.json()
-        current_content = base64.b64decode(payload["content"].replace("\n", "")).decode("utf-8")
-        sha = payload["sha"]
-    except Exception as e:
-        output(f"auto-apply: could not fetch {file_path}: {e}", "warn")
-        return False
-
-    # 2. Verify old code is present verbatim
-    if old_code not in current_content:
-        output(
-            f"auto-apply: patch target not found verbatim in {file_path} — skipping",
-            "warn",
-        )
-        return False
-
-    # 3. Apply replacement
-    new_content = current_content.replace(old_code, new_code, 1)
-    if new_content == current_content:
-        output(f"auto-apply: replacement produced no change in {file_path}", "warn")
-        return False
-
-    # 4. Commit back to the PR branch
-    encoded = base64.b64encode(new_content.encode("utf-8")).decode("ascii")
-    pr_number = os.environ.get("PR_NUMBER", "?")
-    try:
-        put_r = requests.put(
-            url,
-            headers=headers,
-            json={
-                "message": f"chore(carbon-gate): auto-apply efficiency patch [PR #{pr_number}]",
-                "content": encoded,
-                "sha": sha,
-                "branch": branch,
-            },
-            timeout=20,
-        )
-        put_r.raise_for_status()
-        output(f"auto-apply: committed optimised {file_path} to {branch}", "success")
-        return True
-    except Exception as e:
-        output(f"auto-apply: commit failed for {file_path}: {e}", "warn")
-        return False
 
 
 def try_auto_apply(suggestions_text: str) -> bool:
@@ -1386,10 +1270,6 @@ def format_override_section(result):
     """Generate markdown for the pay-to-override section shown in blocked PRs."""
     pay_link = os.environ.get("PAY_OVERRIDE_URL", "").strip() or None
 
-    if not pay_link:
-        if not os.environ.get("OVERRIDE_SIGNING_SECRET", "").strip():
-            output("OVERRIDE_SIGNING_SECRET is not set — pay-to-override link will not appear in PR comment", "warn")
-
     lines_out = []
 
     if pay_link:
@@ -1426,7 +1306,7 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
     api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app")
     dashboard_url = f"{api_endpoint}/dashboard"
 
-    # Pay link built in action.yml YAML expression and passed via env var
+    # Pay link built entirely in action.yml YAML expression - guaranteed present
     pay_link = os.environ.get("PAY_OVERRIDE_URL", "").strip() or None
     output(f"Pay-to-override link: {pay_link}", "info")
 

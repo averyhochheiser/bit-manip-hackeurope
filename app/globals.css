@@ -1,6 +1,17 @@
 @import "tailwindcss";
 
 @theme {
+  --color-canvas: #FFF8F0;
+  --color-canvas-raised: #F7EFE4;
+  --color-ink: #002A32;
+  --color-ink-muted: #2F5157;
+  --color-ink-faint: #5D767A;
+  --color-border-subtle: #E0DDD9;
+  --color-stoneware-turquoise: #98D2EB;
+  --color-stoneware-pink: #C4A4A7;
+  --color-stoneware-green: #69995D;
+  --color-stoneware-bordeaux: #533745;
+
   --color-crusoe: #98d2eb;
   --color-sage: #69995d;
   --color-mauve: #533745;
@@ -55,7 +66,5 @@
 }
 
 @utility bg-noise {
-  background-image:
-    radial-gradient(circle at 20% 20%, rgba(152, 210, 235, 0.06), transparent 35%),
-    radial-gradient(circle at 80% 0%, rgba(105, 153, 93, 0.04), transparent 25%);
+  background-image: none;
 }
