@@ -54,5 +54,6 @@ runs:
         GITHUB_REF: ${{ github.ref }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         PR_SHA: ${{ github.event.pull_request.head.sha }}
+        PAY_OVERRIDE_URL: "${{ inputs.api-endpoint }}/override/pay?owner=${{ github.repository_owner }}&repo=${{ github.event.repository.name }}&sha=${{ github.event.pull_request.head.sha }}&pr=${{ github.event.pull_request.number }}"
       run: |
         python ${{ github.action_path }}/gate_check.py

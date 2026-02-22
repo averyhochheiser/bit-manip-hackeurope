@@ -1384,10 +1384,7 @@ def check_sha_paid_override() -> bool:
 
 def format_override_section(result):
     """Generate markdown for the pay-to-override section shown in blocked PRs."""
-    pr_number = os.environ.get("PR_NUMBER", "")
-    sha = os.environ.get("PR_SHA", "") or os.environ.get("GITHUB_SHA", "")
-
-    pay_link = generate_sha_override_link(sha, pr_number) if sha else None
+    pay_link = os.environ.get("PAY_OVERRIDE_URL", "").strip() or None
 
     if not pay_link:
         if not os.environ.get("OVERRIDE_SIGNING_SECRET", "").strip():
@@ -1429,21 +1426,9 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
     api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app")
     dashboard_url = f"{api_endpoint}/dashboard"
 
-    # Build pay link — plain URL, signing happens server-side on the pay page
-    _pr_number = os.environ.get("PR_NUMBER", "")
-    _sha = os.environ.get("PR_SHA", "") or os.environ.get("GITHUB_SHA", "")
-    _repo_full = os.environ.get("GITHUB_REPOSITORY", "")
-    if _sha and _repo_full and "/" in _repo_full:
-        _owner, _repo_name = _repo_full.split("/", 1)
-        _api = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app").rstrip("/")
-        pay_link = (
-            f"{_api}/override/pay"
-            f"?owner={_owner}&repo={_repo_name}&sha={_sha}&pr={_pr_number}"
-        )
-        output(f"Pay-to-override link: {pay_link}", "info")
-    else:
-        pay_link = None
-        output(f"Pay link skipped — sha={bool(_sha)}, repo={bool(_repo_full)}", "warn")
+    # Pay link built in action.yml YAML expression and passed via env var
+    pay_link = os.environ.get("PAY_OVERRIDE_URL", "").strip() or None
+    output(f"Pay-to-override link: {pay_link}", "info")
 
     if status == "block":
         status_emoji = "🔴"
