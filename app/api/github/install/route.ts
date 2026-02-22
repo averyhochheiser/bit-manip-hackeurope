@@ -397,7 +397,7 @@ export async function POST(req: Request) {
   const workflowResult = await putFile(
     ghToken,
     canonicalRepo,
-    "carbon-gate.yml",
+    "cool/carbon-gate.yml",
     WORKFLOW_YAML,
     "ci: add Carbon Gate workflow",
     targetBranch,
