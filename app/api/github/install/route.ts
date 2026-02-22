@@ -119,6 +119,8 @@ async function putFile(
         message,
         content: Buffer.from(content).toString("base64"),
       };
+      console.log(body);
+      console.log(`[putFile] Preparing PUT body: message="${message}", content length=${content.length}, sha=${sha}, branch=${branch}, isEmptyRepo=${isEmptyRepo}`);
       if (sha) body.sha = sha;
       if (branch && !isEmptyRepo) body.branch = branch;
 
