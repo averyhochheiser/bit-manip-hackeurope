@@ -13,6 +13,7 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
   const [orgApiKey, setOrgApiKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
+  const [secretCreated, setSecretCreated] = useState(false);
 
   async function handleInstall() {
     setState("loading");
@@ -40,6 +41,7 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
 
       setState("done");
       setMessage(data.message);
+      if (data.secretCreated) setSecretCreated(true);
       if (data.orgApiKey) setOrgApiKey(data.orgApiKey);
     } catch (err) {
       setState("error");
@@ -60,10 +62,29 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sage">
           <Check size={14} />
-          <span className="text-xs font-semibold">Workflow installed!</span>
+          <span className="text-xs font-semibold">
+            {secretCreated ? "Fully installed — ready to go!" : "Workflow installed!"}
+          </span>
         </div>
 
-        {orgApiKey && (
+        {secretCreated && (
+          <div className="rounded-xl border border-sage/20 bg-sage/[0.05] p-3 space-y-1">
+            <p className="text-[11px] text-floral/60 leading-relaxed">
+              <span className="font-semibold text-sage">Workflow + secret</span> configured automatically.
+              Open a PR to trigger your first gate check.
+            </p>
+            <a
+              href={`https://github.com/${repo}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-sage hover:text-sage/80 transition"
+            >
+              Open repo <ExternalLink size={10} />
+            </a>
+          </div>
+        )}
+
+        {!secretCreated && orgApiKey && (
           <div className="rounded-xl border border-floral/[0.08] bg-floral/[0.02] p-4 space-y-2">
             <div className="flex items-center gap-2">
               <Key size={12} className="text-sage/60" />
@@ -96,7 +117,7 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
           </div>
         )}
 
-        {!orgApiKey && (
+        {!secretCreated && !orgApiKey && (
           <a
             href={`https://github.com/${repo}`}
             target="_blank"
