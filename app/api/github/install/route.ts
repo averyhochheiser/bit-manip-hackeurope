@@ -340,6 +340,13 @@ export async function POST(req: Request) {
       {
         error: `Failed to install Carbon Gate workflow (HTTP ${workflowResult.status})`,
         details: [workflowResult.error],
+        debug: {
+          scopes,
+          permissions: repoData.permissions,
+          repo,
+          tokenPresent: !!ghToken,
+          tokenPrefix: ghToken?.slice(0, 8) + "...",
+        },
       },
       { status: 500 },
     );
