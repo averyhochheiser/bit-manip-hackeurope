@@ -414,82 +414,51 @@ Be thorough. Do not limit yourself.
 {files_section}
 """
 
-    messages = [{"role": "user", "content": prompt}]
-    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app").rstrip("/")
-    org_api_key = os.environ.get("ORG_API_KEY", "").strip()
+    try:
+        response = requests.post(
+            f"{CRUSOE_API_BASE}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {crusoe_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": CRUSOE_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 4096,
+                "temperature": 0.3,
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
+        data = response.json()
+        raw = data["choices"][0]["message"]["content"].strip()
 
-    raw = None
+        # Split into suggestions and patch
+        suggestions = None
+        patch = None
 
-    # Try direct Crusoe API first
-    if crusoe_api_key:
-        try:
-            response = requests.post(
-                f"{CRUSOE_API_BASE}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {crusoe_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": CRUSOE_MODEL,
-                    "messages": messages,
-                    "max_tokens": 4096,
-                    "temperature": 0.3,
-                },
-                timeout=120,
-            )
-            response.raise_for_status()
-            data = response.json()
-            raw = data["choices"][0]["message"]["content"].strip()
-        except Exception as e:
-            output(f"Direct Crusoe AI call failed: {e}", "warn")
+        # Extract suggestions section
+        sug_match = re.search(r'## Suggestions\s*\n(.*?)(?=## Patch|$)', raw, re.DOTALL)
+        if sug_match:
+            suggestions = sug_match.group(1).strip()
 
-    # Fall back to proxy if direct call failed or key not set
-    if raw is None and org_api_key:
-        output("Using Carbon Gate proxy for Crusoe AI...", "info")
-        try:
-            response = requests.post(
-                f"{api_endpoint}/api/crusoe/chat",
-                headers={"Content-Type": "application/json"},
-                json={
-                    "org_api_key": org_api_key,
-                    "messages": messages,
-                    "max_tokens": 4096,
-                    "temperature": 0.3,
-                },
-                timeout=120,
-            )
-            response.raise_for_status()
-            data = response.json()
-            raw = data["choices"][0]["message"]["content"].strip()
-        except Exception as e:
-            output(f"Proxy Crusoe AI call failed: {e}", "warn")
+        # Extract patch from code fence
+        patch_match = re.search(r'```diff\n(.*?)```', raw, re.DOTALL)
+        if patch_match:
+            candidate = patch_match.group(1).strip()
+            if '--- a/' in candidate:
+                patch = candidate
+            else:
+                output("Patch block found but doesn't look like a unified diff", "warn")
 
-    if raw is None:
+        if not suggestions:
+            # fallback: return the whole response as suggestions
+            suggestions = raw
+
+        return suggestions, patch
+    except Exception as e:
+        output(f"Crusoe AI call failed: {e}", "warn")
         return None, None
-
-    # Split into suggestions and patch
-    suggestions = None
-    patch = None
-
-    # Extract suggestions section
-    sug_match = re.search(r'## Suggestions\s*\n(.*?)(?=## Patch|$)', raw, re.DOTALL)
-    if sug_match:
-        suggestions = sug_match.group(1).strip()
-
-    # Extract patch from code fence
-    patch_match = re.search(r'```diff\n(.*?)```', raw, re.DOTALL)
-    if patch_match:
-        candidate = patch_match.group(1).strip()
-        if '--- a/' in candidate:
-            patch = candidate
-        else:
-            output("Patch block found but doesn't look like a unified diff", "warn")
-
-    if not suggestions:
-        # fallback: return the whole response as suggestions
-        suggestions = raw
-
-    return suggestions, patch
 
 
 
@@ -674,249 +643,53 @@ def _post_reply(message: str):
 def run_patch_apply_mode(config: dict):
     """
     Apply the Crusoe AI optimization patch in response to a /apply-crusoe-patch comment.
-    Generates complete optimized files from Crusoe AI and commits them to the PR branch.
+    Generates the patch fresh from Crusoe and commits it to the PR branch.
     """
-    import base64
-
     pr_number = os.environ.get("PR_NUMBER")
-    github_token = os.environ.get("GITHUB_TOKEN")
-    repo = os.environ.get("GITHUB_REPOSITORY")
     output(f"Patch apply mode for PR #{pr_number}", "info")
 
     file_contents = get_pr_file_contents()
     if not file_contents:
-        _post_reply("\u274c No Python files found in this PR \u2014 nothing to patch.")
+        _post_reply("❌ No Python files found in this PR — nothing to patch.")
         return
 
     output("Generating Crusoe AI optimizations...", "info")
-    crusoe_api_key = os.environ.get("CRUSOE_API_KEY", "").strip()
-    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app").rstrip("/")
-    org_api_key = os.environ.get("ORG_API_KEY", "").strip()
+    suggestions, patch = call_crusoe_for_suggestions(file_contents, config)
 
-    gpu = config.get("gpu", "A100")
-    estimated_hours = config.get("estimated_hours", 1.0)
-
-    # Build prompt asking for COMPLETE optimized files (not diffs — diffs are fragile)
-    files_section = ""
-    for filename, file_content in file_contents.items():
-        files_section += f"\n### {filename}\n```python\n{file_content[:4000]}\n```\n"
-
-    prompt = f"""You are a carbon-efficiency expert optimizing ML training code.
-
-The training job runs on **{gpu}** GPUs for approximately **{estimated_hours}h**.
-
-Below are the Python files from a pull request. Return **complete, optimized versions** of each file.
-
-Focus on:
-- Mixed-precision training (torch.autocast / GradScaler)
-- Gradient checkpointing where applicable
-- Efficient data loading (num_workers, pin_memory)
-- Early stopping when validation loss plateaus
-- Removing unnecessary CPU<->GPU transfers
-- Any other concrete energy-saving improvements
-
-**FORMAT RULES (follow exactly):**
-- Before each file, write a line: ===FILENAME: path/to/file.py===
-- Then the complete optimized Python code
-- Between files, write: ===FILE_SEPARATOR===
-- Add brief inline comments (# CARBON-OPT: ...) for each optimization
-- Keep ALL existing functionality — only add/modify for efficiency
-- Do NOT wrap code in markdown fences
-
-## Files
-{files_section}
-
-Return the complete optimized files now:"""
-
-    messages = [{"role": "user", "content": prompt}]
-
-    # Try direct Crusoe API first, fall back to proxy (so client repos don't need CRUSOE_API_KEY)
-    ai_text = None
-    if crusoe_api_key:
-        output("Using direct Crusoe API (CRUSOE_API_KEY set)", "info")
-        try:
-            response = requests.post(
-                f"{CRUSOE_API_BASE}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {crusoe_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": CRUSOE_MODEL,
-                    "messages": messages,
-                    "max_tokens": 4096,
-                    "temperature": 0.2,
-                },
-                timeout=120,
-            )
-            response.raise_for_status()
-            data = response.json()
-            ai_text = data["choices"][0]["message"]["content"].strip()
-        except Exception as e:
-            output(f"Direct Crusoe API call failed: {e}", "warn")
-
-    if ai_text is None and org_api_key:
-        output("Falling back to Carbon Gate proxy for Crusoe AI...", "info")
-        try:
-            response = requests.post(
-                f"{api_endpoint}/api/crusoe/chat",
-                headers={"Content-Type": "application/json"},
-                json={
-                    "org_api_key": org_api_key,
-                    "messages": messages,
-                    "max_tokens": 4096,
-                    "temperature": 0.2,
-                },
-                timeout=120,
-            )
-            response.raise_for_status()
-            data = response.json()
-            ai_text = data["choices"][0]["message"]["content"].strip()
-        except Exception as e:
-            output(f"Proxy Crusoe AI call failed: {e}", "warn")
-
-    if ai_text is None:
-        _post_reply(
-            "\u274c Could not reach Crusoe AI. "
-            "Ensure `CRUSOE_API_KEY` is set in this repo's secrets, "
-            "or `CARBON_GATE_ORG_KEY` is set to use the proxy."
-        )
-        return
-
-    # Parse the response into filename -> optimized content
-    optimized_files = _parse_optimized_files(ai_text, file_contents)
-
-    if not optimized_files:
-        # Fallback: if parsing failed but we got content, try the whole response as single file
-        if ai_text and len(file_contents) == 1:
-            only_file = list(file_contents.keys())[0]
-            cleaned = ai_text
-            if cleaned.startswith("```"):
-                cleaned = cleaned[cleaned.index("\n")+1:] if "\n" in cleaned else cleaned
-            if cleaned.rstrip().endswith("```"):
-                cleaned = cleaned.rstrip()[:-3].rstrip()
-            optimized_files = {only_file: cleaned}
-        else:
+    if not patch:
+        if suggestions:
             _post_reply(
-                "\u274c Could not parse optimized code from AI response. "
-                "The AI may not have followed the expected format.\n\n"
-                "<details>\n<summary>Raw AI Response</summary>\n\n"
-                f"```\n{ai_text[:2000]}\n```\n\n</details>"
+                "⚠️ Crusoe generated suggestions but no auto-applicable patch was found. "
+                "Please apply manually:\n\n<details>\n<summary>Suggestions</summary>\n\n"
+                f"{suggestions}\n\n</details>"
             )
-            return
-
-    output(f"Generated optimized code for {len(optimized_files)} file(s)", "success")
-
-    # Get PR branch info
-    headers_gh = {
-        "Authorization": f"Bearer {github_token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-    pr_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
-    pr_resp = requests.get(pr_url, headers=headers_gh, timeout=10)
-    if not pr_resp.ok:
-        _post_reply("\u274c Could not fetch PR info from GitHub API.")
+        else:
+            _post_reply("❌ Could not generate a patch. Please try again or apply suggestions manually.")
         return
-    pr_data = pr_resp.json()
-    branch = pr_data["head"]["ref"]
 
-    # Commit each optimized file via GitHub API
-    committed = []
-    for filename, new_content in optimized_files.items():
-        # Skip if content is identical
-        if filename in file_contents and new_content.strip() == file_contents[filename].strip():
-            output(f"  Skipped {filename} (no changes)", "info")
-            continue
+    output(f"Applying patch ({len(patch)} chars)...", "info")
+    applied = apply_patch_to_pr(patch)
 
-        try:
-            # Get current file SHA
-            file_url = f"https://api.github.com/repos/{repo}/contents/{filename}?ref={branch}"
-            file_resp = requests.get(file_url, headers=headers_gh, timeout=10)
-            if not file_resp.ok:
-                output(f"  Could not get SHA for {filename}", "warn")
-                continue
-            file_sha = file_resp.json()["sha"]
-
-            # Commit the optimized file
-            encoded = base64.b64encode(new_content.encode("utf-8")).decode("ascii")
-            update_url = f"https://api.github.com/repos/{repo}/contents/{filename}"
-            update_resp = requests.put(
-                update_url,
-                headers=headers_gh,
-                json={
-                    "message": f"\u26a1 Carbon Gate: optimize {filename} for energy efficiency",
-                    "content": encoded,
-                    "sha": file_sha,
-                    "branch": branch,
-                },
-                timeout=15,
-            )
-            if update_resp.ok:
-                committed.append(filename)
-                output(f"  Committed optimized {filename}", "success")
-            else:
-                output(f"  Failed to commit {filename}: {update_resp.status_code}", "warn")
-        except Exception as e:
-            output(f"  Error committing {filename}: {e}", "warn")
-
-    if committed:
-        file_list = "\n".join(f"- `{f}`" for f in committed)
+    if applied:
+        why_block = f"\n\n**What was changed and why:**\n\n{suggestions}\n" if suggestions else ""
         _post_reply(
-            "\u26a1 **Crusoe efficiency patch applied!**\n\n"
-            f"Optimized code has been committed to branch `{branch}`:\n\n{file_list}\n\n"
-            "Changes include: mixed-precision training, efficient data loading, "
-            "gradient checkpointing, early stopping, and other carbon-reducing improvements.\n\n"
-            "Please review the changes and re-run the carbon gate check."
+            "⚡ **Crusoe efficiency patch applied!**\n\n"
+            "Optimized code has been committed to this branch. "
+            "Re-run or push a new commit to verify reduced emissions."
+            f"{why_block}\n"
+            "<details>\n<summary>View diff</summary>\n\n"
+            f"```diff\n{patch}\n```\n\n</details>"
         )
-        output(f"Efficiency patch committed: {len(committed)} file(s)", "success")
+        output("Efficiency patch committed to PR branch", "success")
     else:
         _post_reply(
-            "\u26a0\ufe0f AI generated optimizations but no files were changed. "
-            "Your code may already be well-optimized, or the AI output couldn't be committed."
+            "⚠️ Could not auto-apply the patch. Please apply manually:\n\n"
+            "```bash\n# Save the patch below to efficiency.patch, then:\ngit apply efficiency.patch\n```\n\n"
+            f"<details>\n<summary>Patch</summary>\n\n```diff\n{patch}\n```\n\n</details>"
         )
 
 
-
-def _parse_optimized_files(ai_text: str, original_files: dict) -> dict:
-    """
-    Parse AI response into {filename: optimized_content} dict.
-    Handles ===FILENAME: ...=== / ===FILE_SEPARATOR=== format.
-    """
-    result = {}
-
-    # Strip markdown fences if the model wrapped them
-    cleaned = ai_text
-    if cleaned.startswith("```"):
-        first_nl = cleaned.index("\n") if "\n" in cleaned else len(cleaned)
-        cleaned = cleaned[first_nl + 1:]
-    if cleaned.rstrip().endswith("```"):
-        cleaned = cleaned.rstrip()[:-3].rstrip()
-
-    # Try structured format
-    if "===FILENAME:" in cleaned:
-        parts = cleaned.split("===FILE_SEPARATOR===")
-        for part in parts:
-            part = part.strip()
-            if not part:
-                continue
-            if "===FILENAME:" in part:
-                try:
-                    marker_start = part.index("===FILENAME:") + 12
-                    marker_end = part.index("===", marker_start)
-                    filename = part[marker_start:marker_end].strip()
-                    code = part[marker_end + 3:].strip()
-                    # Strip any markdown fences
-                    if code.startswith("```"):
-                        first_nl = code.index("\n") if "\n" in code else len(code)
-                        code = code[first_nl + 1:]
-                    if code.rstrip().endswith("```"):
-                        code = code.rstrip()[:-3].rstrip()
-                    if code:
-                        result[filename] = code
-                except (ValueError, IndexError):
-                    continue
-
-    return result
+# ── Auto-apply helpers ────────────────────────────────────────────────────────
 
 
 def parse_carbon_patch(text: str) -> Optional[Dict[str, str]]:
@@ -1363,7 +1136,6 @@ def call_gate_api(config):
         output("Not a pull request event, skipping Carbon Gate check", "info")
         sys.exit(0)
 
-    pr_author = os.environ.get("PR_AUTHOR")
     output(
         f"Running Carbon Gate check for PR #{pr_number}",
         "info",
@@ -1379,7 +1151,6 @@ def call_gate_api(config):
             "estimated_hours": hours,
             "region": region,
             "api_key": org_api_key,
-            **({"pr_author": pr_author} if pr_author else {}),
         }
         try:
             response = requests.post(
@@ -1950,8 +1721,7 @@ def main():
 
     if config.get("suggest_crusoe", True):
         crusoe_key = os.environ.get("CRUSOE_API_KEY", "").strip()
-        org_key = os.environ.get("ORG_API_KEY", "").strip()
-        if crusoe_key or org_key:
+        if crusoe_key:
             output("Fetching AI carbon-efficiency analysis from Crusoe...", "info")
             file_contents = get_pr_file_contents()
             if file_contents:
@@ -1967,7 +1737,7 @@ def main():
             else:
                 output("No Python files found in PR, using static suggestions", "info")
         else:
-            output("No Python files changed in PR, skipping AI analysis", "info")
+            output("Crusoe API key available, but no Python files changed in PR", "info")
 
         if not suggestions:
             suggestions = get_static_suggestions(config)
