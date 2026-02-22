@@ -1270,10 +1270,6 @@ def format_override_section(result):
     """Generate markdown for the pay-to-override section shown in blocked PRs."""
     pay_link = os.environ.get("PAY_OVERRIDE_URL", "").strip() or None
 
-    if not pay_link:
-        if not os.environ.get("OVERRIDE_SIGNING_SECRET", "").strip():
-            output("OVERRIDE_SIGNING_SECRET is not set — pay-to-override link will not appear in PR comment", "warn")
-
     lines_out = []
 
     if pay_link:
