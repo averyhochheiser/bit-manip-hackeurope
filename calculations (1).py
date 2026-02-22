@@ -12,7 +12,7 @@ Physics pipeline:
 
 Called by /api/gate/check on every PR. Keep this dependency-light.
 """
-
+## :)
 import math
 import os
 from dataclasses import dataclass
