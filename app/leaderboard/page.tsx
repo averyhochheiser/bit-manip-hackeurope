@@ -135,19 +135,6 @@ export default async function LeaderboardPage() {
           </div>
         )}
 
-        {/* CTA */}
-        <div className="mt-16 rounded-2xl border border-floral/[0.06] bg-floral/[0.02] p-8 text-center">
-          <p className="text-sm font-semibold text-floral/70">Want your team on this board?</p>
-          <p className="mt-1 text-xs text-floral/40">
-            Add Carbon Gate to any repo in 5 minutes. Works with private and open-source projects.
-          </p>
-          <a
-            href="/api/auth/signin"
-            className="mt-4 inline-flex items-center rounded-full border border-sage/30 bg-sage/10 px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-sage transition hover:bg-sage/20"
-          >
-            Sign in with GitHub
-          </a>
-        </div>
       </div>
     </main>
   );
