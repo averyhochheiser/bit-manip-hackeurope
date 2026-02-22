@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { GitBranch, Leaf, Settings, ShieldCheck, Users, Bell, Trophy, LogOut } from "lucide-react";
+import { GitBranch, Leaf, Settings, ShieldCheck, Bell, Trophy, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function DashboardLayout({
@@ -23,7 +23,6 @@ export function DashboardLayout({
   const navItems = [
     { href: "/dashboard", label: "Overview", icon: ShieldCheck },
     { href: "/dashboard/repos", label: "Repos", icon: GitBranch },
-    { href: "/dashboard/teams", label: "Teams", icon: Users },
     { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
     { href: "/settings", label: "Settings", icon: Settings },
   ];

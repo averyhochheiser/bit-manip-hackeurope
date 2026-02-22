@@ -8,13 +8,27 @@ type InstallButtonProps = {
   onInstalled?: (repo: string) => void;
 };
 
+function isRepoInstalled(repo: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem("carbon-gate-installed-repos");
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    return list.includes(repo);
+  } catch {
+    return false;
+  }
+}
+
 export function InstallCarbonGate({ repo, onInstalled }: InstallButtonProps) {
-  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const alreadyInstalled = isRepoInstalled(repo);
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
+    alreadyInstalled ? "done" : "idle"
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [orgApiKey, setOrgApiKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
-  const [secretCreated, setSecretCreated] = useState(false);
+  const [secretCreated, setSecretCreated] = useState(alreadyInstalled);
 
   async function handleInstall() {
     setState("loading");

@@ -5,11 +5,12 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ExternalLink, ShieldCheck, GitBranch } from "lucide-react";
 import { InstallCarbonGate } from "./install-carbon-gate";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 const LS_KEY = "carbon-gate-installed-repos";
 
 function getInstalledFromStorage(): Set<string> {
+  if (typeof window === "undefined") return new Set();
   try {
     const raw = localStorage.getItem(LS_KEY);
     return new Set(raw ? JSON.parse(raw) : []);
@@ -30,24 +31,21 @@ type ReposGridProps = {
 };
 
 export function ReposGrid({ activated, notActivated }: ReposGridProps) {
-  const [localActivated, setLocalActivated] = useState<RepoReport[]>(activated);
-  const [localNotActivated, setLocalNotActivated] = useState<RepoReport[]>(notActivated);
-
-  // On mount, promote any locally-installed repos that the server still shows as not activated
-  useEffect(() => {
+  // Lazy initialisers read localStorage synchronously — no flash on reload
+  const [localActivated, setLocalActivated] = useState<RepoReport[]>(() => {
     const installed = getInstalledFromStorage();
-    if (installed.size === 0) return;
+    if (installed.size === 0) return activated;
+    const promoted = notActivated
+      .filter((r) => installed.has(r.repo))
+      .map((r) => ({ ...r, hasGateData: true }));
+    return [...activated, ...promoted];
+  });
 
-    setLocalNotActivated((prev) => {
-      const toPromote = prev.filter((r) => installed.has(r.repo));
-      if (toPromote.length === 0) return prev;
-      setLocalActivated((act) => [
-        ...act,
-        ...toPromote.map((r) => ({ ...r, hasGateData: true })),
-      ]);
-      return prev.filter((r) => !installed.has(r.repo));
-    });
-  }, []);
+  const [localNotActivated, setLocalNotActivated] = useState<RepoReport[]>(() => {
+    const installed = getInstalledFromStorage();
+    if (installed.size === 0) return notActivated;
+    return notActivated.filter((r) => !installed.has(r.repo));
+  });
 
   function handleInstalled(repoName: string) {
     const installed = getInstalledFromStorage();
