@@ -10,6 +10,10 @@ import yaml
 import requests
 import json
 import re
+import hmac as _hmac_module
+import hashlib
+import time
+from urllib.parse import quote as _url_quote
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -1408,37 +1412,87 @@ def call_gate_api(config):
 
 
 
+def generate_sha_override_link(sha: str, pr_number: str) -> Optional[str]:
+    """
+    Generate a signed GET URL for the pay-to-override checkout endpoint.
+
+    Requires OVERRIDE_SIGNING_SECRET env var (passed from the action input).
+    The link is valid for 24 hours (matching the server-side CHECKOUT_WINDOW_MS).
+
+    Canonical payload (keys sorted alphabetically — must match lib/hmac.ts):
+        check=carbon&owner=<owner>&repo=<repo>&sha=<sha>&ts=<epoch_ms>
+    """
+    secret = os.environ.get("OVERRIDE_SIGNING_SECRET", "").strip()
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app").rstrip("/")
+    repo_full = os.environ.get("GITHUB_REPOSITORY", "")
+
+    if not secret or not sha or not repo_full or "/" not in repo_full:
+        return None
+
+    owner, repo_name = repo_full.split("/", 1)
+    ts = str(int(time.time() * 1000))  # epoch milliseconds
+    check = "carbon"
+
+    payload = f"check={check}&owner={owner}&repo={repo_name}&sha={sha}&ts={ts}"
+    sig = _hmac_module.new(
+        secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+
+    return (
+        f"{api_endpoint}/api/override/create-checkout"
+        f"?owner={_url_quote(owner, safe='')}"
+        f"&repo={_url_quote(repo_name, safe='')}"
+        f"&sha={_url_quote(sha, safe='')}"
+        f"&check={check}"
+        f"&pr={_url_quote(str(pr_number), safe='')}"
+        f"&ts={ts}&sig={sig}"
+    )
+
+
 def format_override_section(result):
     """Generate markdown for override options in PR comment."""
+    pr_number = os.environ.get("PR_NUMBER", "")
+    # PR_SHA is the actual head commit SHA set in action.yml;
+    # GITHUB_SHA is the merge commit — use PR_SHA when available.
+    sha = os.environ.get("PR_SHA", "") or os.environ.get("GITHUB_SHA", "")
+
+    # Generate a signed pay-to-override link (no ORG_API_KEY required)
+    pay_link = generate_sha_override_link(sha, pr_number) if sha else None
+
+    # Optionally enrich with override eligibility info from the billing API
     override_info = check_override_eligibility({}, result)
-    if not override_info:
+
+    if not pay_link and not override_info:
         return ""
 
     lines_out = []
     lines_out.append("")
     lines_out.append("### \u2699\ufe0f Override Options")
     lines_out.append("")
-    lines_out.append(f"| Metric | Value |")
-    lines_out.append(f"|--------|-------|")
-    lines_out.append(f"| Repo usage this month | {override_info.get('repo_usage_kg', 0):.1f} / {override_info.get('hard_cap_kg', 20)} kgCO\u2082 |")
-    lines_out.append(f"| Overrides used | {override_info.get('overrides_used', 0)} / {override_info.get('max_overrides', 5)} |")
-    lines_out.append("")
 
-    if override_info.get("allowed"):
-        otype = override_info.get("override_type")
-        if otype == "admin":
-            lines_out.append("\u2705 **Admin override available** \u2014 Add the `carbon-override` label to this PR to proceed.")
+    # Show billing API stats when available
+    if override_info:
+        lines_out.append("| Metric | Value |")
+        lines_out.append("|--------|-------|")
+        lines_out.append(f"| Repo usage this month | {override_info.get('repo_usage_kg', 0):.1f} / {override_info.get('hard_cap_kg', 20)} kgCO\u2082 |")
+        lines_out.append(f"| Overrides used | {override_info.get('overrides_used', 0)} / {override_info.get('max_overrides', 5)} |")
+        lines_out.append("")
+
+        if override_info.get("allowed"):
+            otype = override_info.get("override_type")
+            if otype == "admin":
+                lines_out.append("\u2705 **Admin override available** \u2014 Add the `carbon-override` label to this PR to proceed.")
+                lines_out.append("")
+        else:
+            reason = override_info.get("reason", "Override not available.")
+            lines_out.append(f"\u26d4 **Override not available:** {reason}")
             lines_out.append("")
-        elif otype == "paid":
-            cost = override_info.get("cost_usd", 0)
-            lines_out.append(f"\U0001f4b3 **Paid override available** \u2014 **${cost:.2f}** to unblock this PR.")
-            lines_out.append("")
-            lines_out.append("> Developers can pay to override the carbon gate when emissions exceed the repo budget.")
-            lines_out.append("> This revenue funds carbon offset programs. Ask a repo admin to initiate the override.")
-            lines_out.append("")
-    else:
-        reason = override_info.get("reason", "Override not available.")
-        lines_out.append(f"\u26d4 **Override not available:** {reason}")
+
+    # Pay-to-override CTA (shown whenever a signed link can be generated)
+    if pay_link:
+        lines_out.append(f"\U0001f4b3 **[Pay to override carbon gate \u2192]({pay_link})**")
+        lines_out.append("")
+        lines_out.append("> Paying unlocks this PR for 7 days and funds verified carbon offset programs.")
         lines_out.append("")
 
     return "\n".join(lines_out)

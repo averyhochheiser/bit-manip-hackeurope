@@ -26,3 +26,4 @@ jobs:
           api-endpoint: ${{ secrets.CARBON_GATE_API_ENDPOINT }}
           org-api-key: ${{ secrets.CARBON_GATE_ORG_KEY }}
           crusoe-api-key: ${{ secrets.CRUSOE_API_KEY }}
+          override-signing-secret: ${{ secrets.OVERRIDE_SIGNING_SECRET }}
