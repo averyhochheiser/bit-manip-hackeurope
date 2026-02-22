@@ -1449,6 +1449,52 @@ def generate_sha_override_link(sha: str, pr_number: str) -> Optional[str]:
     )
 
 
+def check_sha_paid_override() -> bool:
+    """
+    Check if the current commit SHA has a valid paid override via /api/override/valid.
+    Returns True if a paid override exists and is still valid.
+    """
+    secret = os.environ.get("OVERRIDE_SIGNING_SECRET", "").strip()
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app").rstrip("/")
+    repo_full = os.environ.get("GITHUB_REPOSITORY", "")
+    sha = os.environ.get("PR_SHA", "") or os.environ.get("GITHUB_SHA", "")
+
+    if not secret or not sha or not repo_full or "/" not in repo_full:
+        return False
+
+    owner, repo_name = repo_full.split("/", 1)
+    ts = str(int(time.time() * 1000))
+    check = "carbon"
+
+    payload = f"check={check}&owner={owner}&repo={repo_name}&sha={sha}&ts={ts}"
+    sig = _hmac_module.new(
+        secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+
+    url = (
+        f"{api_endpoint}/api/override/valid"
+        f"?owner={_url_quote(owner, safe='')}"
+        f"&repo={_url_quote(repo_name, safe='')}"
+        f"&sha={_url_quote(sha, safe='')}"
+        f"&check={check}"
+        f"&ts={ts}"
+    )
+
+    try:
+        resp = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {sig}"},
+            timeout=10,
+        )
+        if resp.ok:
+            data = resp.json()
+            return bool(data.get("valid", False))
+        return False
+    except Exception as e:
+        output(f"Paid override check failed: {e}", "warn")
+        return False
+
+
 def format_override_section(result):
     """Generate markdown for override options in PR comment."""
     pr_number = os.environ.get("PR_NUMBER", "")
@@ -1459,11 +1505,15 @@ def format_override_section(result):
     # Generate a signed pay-to-override link (no ORG_API_KEY required)
     pay_link = generate_sha_override_link(sha, pr_number) if sha else None
 
+    if not pay_link:
+        secret_set = bool(os.environ.get("OVERRIDE_SIGNING_SECRET", "").strip())
+        if not secret_set:
+            output("OVERRIDE_SIGNING_SECRET is not set — pay-to-override link will not appear in PR comment", "warn")
+        elif not sha:
+            output("No commit SHA found (PR_SHA / GITHUB_SHA) — pay-to-override link skipped", "warn")
+
     # Optionally enrich with override eligibility info from the billing API
     override_info = check_override_eligibility({}, result)
-
-    if not pay_link and not override_info:
-        return ""
 
     lines_out = []
     lines_out.append("")
@@ -1483,16 +1533,27 @@ def format_override_section(result):
             if otype == "admin":
                 lines_out.append("\u2705 **Admin override available** \u2014 Add the `carbon-override` label to this PR to proceed.")
                 lines_out.append("")
+            elif otype == "paid":
+                cost = override_info.get("cost_usd", 0)
+                if pay_link:
+                    lines_out.append(f"\U0001f4b3 **[Pay ${cost:.2f} to override carbon gate \u2192]({pay_link})**")
+                    lines_out.append("")
+                    lines_out.append("> Paying unlocks this PR for 7 days and funds verified carbon offset programs.")
+                    lines_out.append("")
         else:
             reason = override_info.get("reason", "Override not available.")
             lines_out.append(f"\u26d4 **Override not available:** {reason}")
             lines_out.append("")
 
-    # Pay-to-override CTA (shown whenever a signed link can be generated)
-    if pay_link:
+    # Pay-to-override CTA when no billing API data (shown whenever a signed link can be generated)
+    if pay_link and not override_info:
         lines_out.append(f"\U0001f4b3 **[Pay to override carbon gate \u2192]({pay_link})**")
         lines_out.append("")
         lines_out.append("> Paying unlocks this PR for 7 days and funds verified carbon offset programs.")
+        lines_out.append("")
+
+    if not pay_link and not override_info:
+        lines_out.append("To unblock this PR: apply the AI code suggestions above, or ask a repo admin to add the `carbon-override` label.")
         lines_out.append("")
 
     return "\n".join(lines_out)
@@ -1612,12 +1673,19 @@ Crusoe analyzed your code and found changes that could reduce compute time and e
     if optimal_window and len(optimal_window) > 20 and "no significant" not in optimal_window.lower():
         timing_note = f" · ⏰ {optimal_window[:80]}"
 
-    comment += f"""<sub>[Dashboard →]({dashboard_url}){timing_note} · Override: `{required_perm}` + justification via `carbon-override` label · 🌱</sub>"""
-
-
-    # Add override options section when gate blocks
+    # Override options come BEFORE the <sub> footer tag (HTML breaks Markdown heading rendering)
     if result.get("status") == "block":
-        comment += format_override_section(result)
+        try:
+            comment += format_override_section(result)
+        except Exception as _e:
+            print(f"::warning::format_override_section failed: {_e}")
+            comment += "
+
+**Override options:** Add the `carbon-override` label, or ask a repo admin.
+
+"
+
+    comment += f"""<sub>[Dashboard →]({dashboard_url}){timing_note} · Override: `{required_perm}` + justification via `carbon-override` label · 🌱</sub>"""
 
     return comment
 
@@ -1838,6 +1906,14 @@ def main():
         if OUTPUT_MODE != "json":
             print("=" * 80)
         return
+
+    # Check for SHA-based paid override (Stripe payment already completed)
+    if check_sha_paid_override():
+        sha = os.environ.get("PR_SHA", "") or os.environ.get("GITHUB_SHA", "")
+        output(f"Paid override verified for SHA {sha[:7]} — carbon gate bypassed", "success")
+        if OUTPUT_MODE != "json":
+            print("=" * 80)
+        sys.exit(0)
 
     # Check for override label (with enhanced security)
     override_check = check_override_label(config)
