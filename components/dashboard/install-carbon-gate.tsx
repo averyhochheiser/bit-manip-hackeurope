@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Zap, Check, Loader2, AlertCircle, ExternalLink, Key, Copy, LogOut } from "lucide-react";
 
 type InstallButtonProps = {
@@ -20,15 +20,21 @@ function isRepoInstalled(repo: string): boolean {
 }
 
 export function InstallCarbonGate({ repo, onInstalled }: InstallButtonProps) {
-  const alreadyInstalled = isRepoInstalled(repo);
-  const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
-    alreadyInstalled ? "done" : "idle"
-  );
+  // Always start as "idle" so server and client render the same HTML (no hydration mismatch).
+  // Check localStorage after mount in useEffect.
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [orgApiKey, setOrgApiKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
-  const [secretCreated, setSecretCreated] = useState(alreadyInstalled);
+  const [secretCreated, setSecretCreated] = useState(false);
+
+  useEffect(() => {
+    if (isRepoInstalled(repo)) {
+      setState("done");
+      setSecretCreated(true);
+    }
+  }, [repo]);
 
   async function handleInstall() {
     setState("loading");
