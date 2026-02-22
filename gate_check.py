@@ -1429,6 +1429,11 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
     api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app")
     dashboard_url = f"{api_endpoint}/dashboard"
 
+    # Build pay link now so it can be embedded in the blocked header
+    _pr_number = os.environ.get("PR_NUMBER", "")
+    _sha = os.environ.get("PR_SHA", "") or os.environ.get("GITHUB_SHA", "")
+    pay_link = generate_sha_override_link(_sha, _pr_number) if _sha else None
+
     if status == "block":
         status_emoji = "🔴"
         status_label = "BLOCKED"
@@ -1451,9 +1456,11 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: 
     repo = os.environ.get("GITHUB_REPOSITORY", "")
 
     # Header + Crusoe comparison table
+    pay_cta = f"\n\n> ## 💳 [Pay to unblock this PR →]({pay_link})\n> *One-time payment · re-run the check after paying and it will pass*" if (status == "block" and pay_link) else ""
     comment = f"""## {status_emoji} Carbon Gate — {status_label}
 
-**{emissions:.2f} kgCO₂eq** — {limit_note}
+**{emissions:.2f} kgCO₂eq** — {limit_note}{pay_cta}
+
 [View full report & repo stats →]({dashboard_url})
 
 ---
