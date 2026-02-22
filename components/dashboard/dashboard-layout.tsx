@@ -1,5 +1,6 @@
 "use client";
 
+// Dashboard layout — shared across all app pages
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { GitBranch, Leaf, Settings, ShieldCheck, Users, Bell, Trophy, LogOut } from "lucide-react";
