@@ -69,49 +69,82 @@ async function putFile(
   branch?: string,
   retries = 3,
 ): Promise<{ ok: boolean; status: number; error?: string }> {
-  const headers = {
+  const getHeaders = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
+  };
+  const putHeaders = {
+    ...getHeaders,
     "Content-Type": "application/json",
   };
 
+  // effectiveBranch may be cleared on 404 (empty repo — branch ref doesn't exist yet)
+  let effectiveBranch = branch;
+
   for (let attempt = 0; attempt < retries; attempt++) {
-    // Check if file already exists (to get its SHA for update)
-    const getRes = await fetch(
-      `https://api.github.com/repos/${repo}/contents/${path}${branch ? `?ref=${branch}` : ""}`,
-      { headers },
-    );
+    try {
+      // Check if file already exists (to get its SHA for update)
+      const getUrl = `https://api.github.com/repos/${repo}/contents/${path}${effectiveBranch ? `?ref=${effectiveBranch}` : ""}`;
+      console.log(`[putFile] GET ${getUrl} (attempt ${attempt + 1})`);
+      const getRes = await fetch(getUrl, { headers: getHeaders });
+      console.log(`[putFile] GET status: ${getRes.status}`);
 
-    let sha: string | undefined;
-    if (getRes.ok) {
-      const existing = (await getRes.json()) as { sha?: string };
-      sha = existing.sha;
+      let sha: string | undefined;
+      if (getRes.ok) {
+        const existing = (await getRes.json()) as { sha?: string };
+        sha = existing.sha;
+        console.log(`[putFile] Existing file sha: ${sha}`);
+      } else {
+        // 404 = file doesn't exist yet, which is fine
+        // Consume the body to avoid connection issues
+        await getRes.text().catch(() => {});
+      }
+
+      const body: Record<string, unknown> = {
+        message,
+        content: Buffer.from(content).toString("base64"),
+      };
+      if (sha) body.sha = sha;
+      if (effectiveBranch) body.branch = effectiveBranch;
+
+      const putUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
+      console.log(`[putFile] PUT ${putUrl}${effectiveBranch ? ` (branch: ${effectiveBranch})` : " (no branch — empty repo)"}`);
+      const res = await fetch(putUrl, {
+        method: "PUT",
+        headers: putHeaders,
+        body: JSON.stringify(body),
+      });
+      console.log(`[putFile] PUT status: ${res.status}`);
+
+      if (res.ok) {
+        return { ok: true, status: res.status };
+      }
+
+      // 409 = conflict (branch HEAD moved) — retry
+      if (res.status === 409 && attempt < retries - 1) {
+        console.log(`[putFile] 409 conflict, retrying in ${500 * (attempt + 1)}ms`);
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+
+      // 404 with a branch specified = branch ref doesn't exist (empty repo).
+      // Retry without branch so GitHub creates the initial commit on HEAD.
+      if (res.status === 404 && effectiveBranch && attempt < retries - 1) {
+        console.log(`[putFile] 404 with branch "${effectiveBranch}" — repo may be empty; retrying without branch`);
+        await res.text().catch(() => {});
+        effectiveBranch = undefined;
+        continue;
+      }
+
+      const err = await res.text().catch(() => "unknown error");
+      console.error(`[putFile] Failed: ${err.slice(0, 200)}`);
+      return { ok: false, status: res.status, error: err };
+    } catch (e) {
+      console.error(`[putFile] Exception on attempt ${attempt + 1}:`, e);
+      if (attempt >= retries - 1) {
+        return { ok: false, status: 500, error: e instanceof Error ? e.message : "Unknown error" };
+      }
     }
-
-    const body: Record<string, unknown> = {
-      message,
-      content: Buffer.from(content).toString("base64"),
-    };
-    if (sha) body.sha = sha;
-    if (branch) body.branch = branch;
-
-    const res = await fetch(
-      `https://api.github.com/repos/${repo}/contents/${path}`,
-      { method: "PUT", headers, body: JSON.stringify(body) },
-    );
-
-    if (res.ok) {
-      return { ok: true, status: res.status };
-    }
-
-    // 409 = conflict (branch HEAD moved between our GET and PUT) — retry
-    if (res.status === 409 && attempt < retries - 1) {
-      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-      continue;
-    }
-
-    const err = await res.text().catch(() => "unknown error");
-    return { ok: false, status: res.status, error: err };
   }
 
   return { ok: false, status: 500, error: "Max retries exceeded" };
@@ -146,10 +179,8 @@ async function putSecret(
     // 2. Encrypt the secret using NaCl sealed box
     const publicKeyBytes = Buffer.from(publicKeyB64, "base64");
     const secretBytes = Buffer.from(secretValue);
-    const encrypted = nacl.box.keyPair(); // only needed for seal
     // Use libsodium-style sealed box: ephemeral keypair + crypto_box
     const ephemeral = nacl.box.keyPair();
-    const nonce = new Uint8Array(nacl.box.nonceLength);
     // Derive nonce from ephemeral public key + recipient public key (simplified: use blake2 hash)
     // GitHub expects libsodium crypto_box_seal format. Let's build it:
     // sealed = ephemeral_pk || crypto_box(msg, nonce=blake2b(ephemeral_pk || recipient_pk), ephemeral_sk, recipient_pk)
@@ -272,7 +303,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const repoData = (await repoCheck.json()) as { permissions?: { push?: boolean; admin?: boolean } };
+  const repoData = (await repoCheck.json()) as {
+    full_name?: string;
+    default_branch?: string;
+    permissions?: { push?: boolean; admin?: boolean };
+  };
   if (!repoData.permissions?.push && !repoData.permissions?.admin) {
     const [owner] = repo.split("/");
     return NextResponse.json(
@@ -283,6 +318,23 @@ export async function POST(req: Request) {
       { status: 403 },
     );
   }
+
+  // Use canonical repo name and default branch from GitHub's response
+  const canonicalRepo = repoData.full_name ?? repo;
+  const targetBranch = branch ?? repoData.default_branch ?? "main";
+
+  // Check whether the branch actually exists as a ref.
+  // Empty repos have default_branch set but no commits yet, so the ref doesn't exist.
+  // The Contents API returns 404/422 when branch is specified but doesn't exist as a ref.
+  // Omitting branch lets GitHub create the initial commit on HEAD instead.
+  const branchRefRes = await fetch(
+    `https://api.github.com/repos/${canonicalRepo}/git/ref/heads/${targetBranch}`,
+    { headers: { Authorization: `Bearer ${ghToken}`, Accept: "application/vnd.github+json" } },
+  );
+  const branchExists = branchRefRes.ok;
+  await branchRefRes.text().catch(() => {});
+  const commitBranch = branchExists ? targetBranch : undefined;
+  console.log(`[install] branch "${targetBranch}" exists: ${branchExists} → commitBranch: ${commitBranch ?? "(none — empty repo)"}`);
 
   // 4. Get org API key for the user
   const { data: profile } = await supabaseAdmin
@@ -307,18 +359,28 @@ export async function POST(req: Request) {
   // 5. Commit files sequentially via Contents API (with conflict retry)
   const workflowResult = await putFile(
     ghToken,
-    repo,
+    canonicalRepo,
     ".github/workflows/carbon-gate.yml",
     WORKFLOW_YAML,
     "ci: add Carbon Gate workflow",
-    branch,
+    commitBranch,
   );
 
   if (!workflowResult.ok) {
     return NextResponse.json(
       {
-        error: "Failed to install Carbon Gate workflow",
+        error: `Failed to install Carbon Gate workflow (HTTP ${workflowResult.status})`,
         details: [workflowResult.error],
+        debug: {
+          scopes,
+          permissions: repoData.permissions,
+          requestedRepo: repo,
+          canonicalRepo,
+          targetBranch,
+          branchExists,
+          commitBranch: commitBranch ?? "(none — empty repo)",
+          tokenPrefix: ghToken?.slice(0, 8) + "...",
+        },
       },
       { status: 500 },
     );
@@ -326,11 +388,11 @@ export async function POST(req: Request) {
 
   const configResult = await putFile(
     ghToken,
-    repo,
+    canonicalRepo,
     "carbon-gate.yml",
     CONFIG_YAML,
     "chore: add Carbon Gate configuration",
-    branch,
+    commitBranch,
   );
 
   if (!configResult.ok) {
@@ -349,7 +411,7 @@ export async function POST(req: Request) {
   let secretCreated = false;
   let secretError: string | undefined;
   if (orgApiKey) {
-    const secretResult = await putSecret(ghToken, repo, "CARBON_GATE_ORG_KEY", orgApiKey);
+    const secretResult = await putSecret(ghToken, canonicalRepo, "CARBON_GATE_ORG_KEY", orgApiKey);
     secretCreated = secretResult.ok;
     if (!secretResult.ok) {
       secretError = secretResult.error;
