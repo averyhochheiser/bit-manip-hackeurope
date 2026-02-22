@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { CarbonBudgetProgressBar } from "@/components/dashboard/carbon-budget-progress";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
-import { ForecastCard } from "@/components/dashboard/forecast-card";
 import { GateHistoryTable } from "@/components/dashboard/gate-history-table";
 import { KpiStrip } from "@/components/dashboard/kpi-strip";
 import { OverageBillingCard } from "@/components/dashboard/overage-billing-card";
@@ -162,13 +161,10 @@ export default async function DashboardPage() {
               />
             </div>
             {displayModel.gateEvents.length > 0 && (
-              <div className="xl:col-span-7">
+              <div className="xl:col-span-12">
                 <GateHistoryTable events={displayModel.gateEvents} />
               </div>
             )}
-            <div className={displayModel.gateEvents.length > 0 ? "xl:col-span-5" : "xl:col-span-12"}>
-              <ForecastCard />
-            </div>
           </section>
         )}
       </div>

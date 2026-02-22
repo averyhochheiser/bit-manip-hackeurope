@@ -11,9 +11,9 @@ type CarbonBudgetProgressBarProps = {
 type ProgressState = "healthy" | "warning" | "reroute";
 
 const FILL_COLOR: Record<ProgressState, string> = {
-  healthy: "bg-stoneware-green",
-  warning: "bg-stoneware-turquoise",
-  reroute: "bg-stoneware-bordeaux"
+  healthy: "bg-sage",
+  warning: "bg-crusoe/70",
+  reroute: "bg-crusoe"
 };
 
 export function CarbonBudgetProgressBar({
@@ -29,23 +29,17 @@ export function CarbonBudgetProgressBar({
   const overageKg = Math.max(0, usedKg - safeBudget);
 
   return (
-    <section className="relative flex h-full flex-col justify-between bg-[#2A2F35] p-6 lg:p-10">
-      <div className="flex items-start justify-between gap-6">
+    <section className="panel flex h-full flex-col justify-between p-6 lg:p-8">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50 lg:left-10 lg:top-10">
-            Carbon Budget
-          </p>
-          <h3 className="mt-16 text-lg font-normal text-[#FFF8F0]">
-            Budget Utilization
-          </h3>
+          <p className="text-[10px] uppercase tracking-widest text-floral/40">Carbon Budget</p>
+          <h3 className="mt-2 text-lg font-medium text-floral">Budget Utilization</h3>
         </div>
-        <p className="mt-16 font-mono text-lg font-light text-[#FFF8F0] lg:mt-0">
-          {pct.toFixed(1)}%
-        </p>
+        <p className="font-mono text-xl font-light text-floral">{pct.toFixed(1)}%</p>
       </div>
 
       <div className="mt-8">
-        <div className="h-1.5 overflow-hidden rounded-full bg-[#FFF8F0]/10">
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
           <motion.div
             className={`h-full rounded-full ${FILL_COLOR[state]}`}
             initial={{ width: 0 }}
@@ -53,16 +47,16 @@ export function CarbonBudgetProgressBar({
             transition={{ type: "spring", stiffness: 120, damping: 22 }}
           />
         </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-sm font-light text-[#FFF8F0]/60">
-          <p className="font-mono">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-sm font-light text-floral/50">
+          <p className="font-mono text-sm">
             {usedKg.toFixed(2)}kg / {safeBudget.toFixed(2)}kg
           </p>
           {overageKg > 0 ? (
-            <span className="border-[0.5px] border-stoneware-bordeaux/30 bg-stoneware-bordeaux/10 px-3 py-1.5 text-[10px] uppercase tracking-widest text-stoneware-bordeaux">
+            <span className="rounded-full border border-crusoe/30 bg-crusoe/10 px-3 py-1 text-[10px] uppercase tracking-widest text-crusoe">
               Reroute active · +{overageKg.toFixed(2)}kg
             </span>
           ) : (
-            <span className="border-[0.5px] border-[#FFF8F0]/10 px-3 py-1.5 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50 bg-[#23282E]">
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-[10px] uppercase tracking-widest text-floral/40">
               On policy budget
             </span>
           )}
@@ -70,9 +64,9 @@ export function CarbonBudgetProgressBar({
       </div>
 
       {projectedKg ? (
-        <p className="mt-6 text-xs font-light text-[#FFF8F0]/50">
+        <p className="mt-6 text-xs font-light text-floral/40">
           Projected period close:{" "}
-          <span className="font-mono text-stoneware-turquoise">
+          <span className="font-mono text-crusoe">
             {projectedKg.toFixed(2)}kg
           </span>
         </p>

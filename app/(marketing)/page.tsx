@@ -23,7 +23,11 @@ export default async function MarketingPage() {
   ]);
 
   return (
-    <main className="relative min-h-screen bg-[#23282E] overflow-x-hidden">
+    <main className="relative min-h-screen bg-[#16191d] overflow-x-hidden">
+      <div className="pointer-events-none absolute inset-0 bg-noise opacity-[0.25]" />
+      <div className="pointer-events-none absolute -left-1/4 -top-1/4 h-1/2 w-1/2 rounded-full bg-sage/[0.03] blur-[120px]" />
+      <div className="pointer-events-none absolute -bottom-1/4 -right-1/4 h-1/2 w-1/2 rounded-full bg-crusoe/[0.03] blur-[120px]" />
+
       <nav className="absolute inset-x-0 top-0 z-50">
         <div className="mx-auto flex max-w-7xl items-center justify-end px-6 py-5 sm:px-8 lg:px-12">
           <div className="flex items-center gap-6">
@@ -31,13 +35,13 @@ export default async function MarketingPage() {
               <>
                 <Link
                   href="/dashboard"
-                  className="text-xs font-semibold uppercase tracking-widest text-white/60 transition hover:text-white"
+                  className="text-xs font-semibold uppercase tracking-widest text-floral/50 transition hover:text-floral"
                 >
                   Dashboard
                 </Link>
                 <Link
                   href="/settings"
-                  className="text-xs font-semibold uppercase tracking-widest text-white/60 transition hover:text-white"
+                  className="text-xs font-semibold uppercase tracking-widest text-floral/50 transition hover:text-floral"
                 >
                   Settings
                 </Link>
@@ -49,30 +53,13 @@ export default async function MarketingPage() {
 
       <Hero isSignedIn={!!user} />
 
-      {/* Palette section divider */}
-      <div className="flex h-[3px]">
-        <div className="flex-1 bg-stoneware-turquoise/40" />
-        <div className="flex-1 bg-stoneware-green/40" />
-        <div className="flex-1 bg-stoneware-pink/40" />
-        <div className="flex-1 bg-stoneware-bordeaux/40" />
-      </div>
-
       <HowItWorks />
-
-      {/* Palette accent line */}
-      <div className="h-[1px] bg-gradient-to-r from-stoneware-turquoise/20 via-stoneware-green/30 to-stoneware-bordeaux/20" />
 
       <div className="relative mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
         <DashboardPreview data={dashboardData} />
       </div>
 
-      {/* Palette accent line */}
-      <div className="h-[1px] bg-gradient-to-r from-stoneware-bordeaux/20 via-stoneware-pink/30 to-stoneware-turquoise/20" />
-
       <Leaderboard topContributors={topContributors} />
-
-      {/* Palette accent line */}
-      <div className="h-[1px] bg-gradient-to-r from-stoneware-green/20 via-stoneware-turquoise/30 to-stoneware-pink/20" />
 
       <Footer />
     </main>
