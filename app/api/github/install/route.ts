@@ -59,59 +59,112 @@ const CONFIG_YAML = `carbon-gate:
 
 // ── GitHub Contents API helper ───────────────────────────────────────────────
 
-async function putFile(
+/** Commit multiple files in a single atomic commit using the Git Trees API. */
+async function commitFiles(
   token: string,
   repo: string,
-  path: string,
-  content: string,
+  files: { path: string; content: string }[],
   message: string,
   branch?: string,
-): Promise<{ ok: boolean; status: number; error?: string }> {
-  const base64 = Buffer.from(content).toString("base64");
-
-  // Check if file already exists (to get its SHA for update)
-  const getRes = await fetch(
-    `https://api.github.com/repos/${repo}/contents/${path}${branch ? `?ref=${branch}` : ""}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-      },
-    },
-  );
-
-  let sha: string | undefined;
-  if (getRes.ok) {
-    const existing = (await getRes.json()) as { sha?: string };
-    sha = existing.sha;
-  }
-
-  const body: Record<string, unknown> = {
-    message,
-    content: base64,
+): Promise<{ ok: boolean; error?: string }> {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "Content-Type": "application/json",
   };
-  if (sha) body.sha = sha;
-  if (branch) body.branch = branch;
 
-  const res = await fetch(
-    `https://api.github.com/repos/${repo}/contents/${path}`,
-    {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "Content-Type": "application/json",
+  try {
+    // 1. Get the ref (branch HEAD)
+    const refName = branch || "main";
+    let refRes = await fetch(
+      `https://api.github.com/repos/${repo}/git/ref/heads/${refName}`,
+      { headers },
+    );
+    // Try "master" if "main" doesn't exist and no branch was specified
+    if (!refRes.ok && !branch) {
+      refRes = await fetch(
+        `https://api.github.com/repos/${repo}/git/ref/heads/master`,
+        { headers },
+      );
+    }
+    if (!refRes.ok) {
+      return { ok: false, error: `Could not find branch (${refRes.status})` };
+    }
+    const refData = (await refRes.json()) as { object: { sha: string } };
+    const baseSha = refData.object.sha;
+
+    // 2. Create blobs for each file
+    const treeItems: { path: string; mode: string; type: string; sha: string }[] = [];
+    for (const file of files) {
+      const blobRes = await fetch(
+        `https://api.github.com/repos/${repo}/git/blobs`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ content: file.content, encoding: "utf-8" }),
+        },
+      );
+      if (!blobRes.ok) {
+        const err = await blobRes.text().catch(() => "");
+        return { ok: false, error: `Failed to create blob for ${file.path} (${blobRes.status}): ${err.slice(0, 100)}` };
+      }
+      const blob = (await blobRes.json()) as { sha: string };
+      treeItems.push({ path: file.path, mode: "100644", type: "blob", sha: blob.sha });
+    }
+
+    // 3. Create a tree with the new files
+    const treeRes = await fetch(
+      `https://api.github.com/repos/${repo}/git/trees`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ base_tree: baseSha, tree: treeItems }),
       },
-      body: JSON.stringify(body),
-    },
-  );
+    );
+    if (!treeRes.ok) {
+      const err = await treeRes.text().catch(() => "");
+      return { ok: false, error: `Failed to create tree (${treeRes.status}): ${err.slice(0, 100)}` };
+    }
+    const tree = (await treeRes.json()) as { sha: string };
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => "unknown error");
-    return { ok: false, status: res.status, error: err };
+    // 4. Create a commit
+    const commitRes = await fetch(
+      `https://api.github.com/repos/${repo}/git/commits`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          message,
+          tree: tree.sha,
+          parents: [baseSha],
+        }),
+      },
+    );
+    if (!commitRes.ok) {
+      const err = await commitRes.text().catch(() => "");
+      return { ok: false, error: `Failed to create commit (${commitRes.status}): ${err.slice(0, 100)}` };
+    }
+    const commit = (await commitRes.json()) as { sha: string };
+
+    // 5. Update the branch ref to point to the new commit
+    const actualRef = refRes.url.includes("master") && !branch ? "heads/master" : `heads/${refName}`;
+    const updateRes = await fetch(
+      `https://api.github.com/repos/${repo}/git/refs/${actualRef}`,
+      {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ sha: commit.sha }),
+      },
+    );
+    if (!updateRes.ok) {
+      const err = await updateRes.text().catch(() => "");
+      return { ok: false, error: `Failed to update ref (${updateRes.status}): ${err.slice(0, 100)}` };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
   }
-
-  return { ok: true, status: res.status };
 }
 
 // ── GitHub Actions Secrets API helper ─────────────────────────────────────────
@@ -301,36 +354,23 @@ export async function POST(req: Request) {
 
   const orgApiKey = keyRow?.api_key ?? "";
 
-  // 5. Commit both files sequentially (parallel commits conflict on the same branch HEAD)
-  const workflowResult = await putFile(
+  // 5. Commit both files in a single atomic commit (avoids branch conflicts)
+  const commitResult = await commitFiles(
     ghToken,
     repo,
-    ".github/workflows/carbon-gate.yml",
-    WORKFLOW_YAML,
-    "ci: add Carbon Gate workflow\n\nAutomatic carbon emissions checking on every PR.",
+    [
+      { path: ".github/workflows/carbon-gate.yml", content: WORKFLOW_YAML },
+      { path: "carbon-gate.yml", content: CONFIG_YAML },
+    ],
+    "ci: add Carbon Gate workflow and configuration\n\nAutomatic carbon emissions checking on every PR.\nDefault thresholds: 2.0 kgCO₂e block, 1.0 kgCO₂e warn.",
     branch,
   );
 
-  const configResult = await putFile(
-    ghToken,
-    repo,
-    "carbon-gate.yml",
-    CONFIG_YAML,
-    "chore: add Carbon Gate configuration\n\nDefault thresholds: 2.0 kgCO₂e block, 1.0 kgCO₂e warn.",
-    branch,
-  );
-
-  const results = [workflowResult, configResult];
-
-  if (!workflowResult.ok || !configResult.ok) {
-    const errors = results.filter((r) => !r.ok).map((r) => r.error);
+  if (!commitResult.ok) {
     return NextResponse.json(
       {
         error: "Failed to install Carbon Gate",
-        details: errors,
-        hint: workflowResult.status === 404
-          ? "Make sure you have push access to this repository."
-          : undefined,
+        details: [commitResult.error],
       },
       { status: 500 },
     );
