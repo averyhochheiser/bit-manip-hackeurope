@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Carbon Gate
-        uses: averyhochheiser/bit-manip-hackeurope@eva/backend-api
+        uses: averyhochheiser/bit-manip-hackeurope@main
         with:
           github-token: \${{ secrets.GITHUB_TOKEN }}
           api-endpoint: "https://bit-manip-hackeurope.vercel.app"
