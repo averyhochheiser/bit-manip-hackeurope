@@ -130,8 +130,29 @@ export async function POST(req: Request) {
   const ghToken = cookieStore.get("gh_token")?.value;
   if (!ghToken) {
     return NextResponse.json(
-      { error: "No GitHub token — please sign out and sign in again to grant repo access." },
+      { error: "No GitHub token — please sign out and sign in again to grant repo access.", needsReauth: true },
       { status: 401 },
+    );
+  }
+
+  // 2b. Validate token has required scopes
+  const scopeCheck = await fetch("https://api.github.com/user", {
+    headers: { Authorization: `Bearer ${ghToken}`, Accept: "application/vnd.github+json" },
+  });
+  const scopes = scopeCheck.headers.get("x-oauth-scopes") ?? "";
+  if (!scopeCheck.ok) {
+    return NextResponse.json(
+      { error: "GitHub token expired — please sign out and sign in again.", needsReauth: true },
+      { status: 401 },
+    );
+  }
+  if (!scopes.includes("repo")) {
+    return NextResponse.json(
+      {
+        error: "Missing repo permission — sign out and sign back in to grant write access to your repositories.",
+        needsReauth: true,
+      },
+      { status: 403 },
     );
   }
 

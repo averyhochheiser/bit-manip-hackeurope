@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Zap, Check, Loader2, AlertCircle, ExternalLink, Key, Copy } from "lucide-react";
+import { Zap, Check, Loader2, AlertCircle, ExternalLink, Key, Copy, LogOut } from "lucide-react";
 
 type InstallButtonProps = {
   repo: string;
@@ -12,6 +12,7 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [orgApiKey, setOrgApiKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [needsReauth, setNeedsReauth] = useState(false);
 
   async function handleInstall() {
     setState("loading");
@@ -26,9 +27,14 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
 
       if (!res.ok) {
         setState("error");
-        const hint = data.hint ? ` ${data.hint}` : "";
-        const detail = data.details?.length ? ` (${data.details[0].slice(0, 120)})` : "";
-        setMessage((data.error ?? "Something went wrong") + hint + detail);
+        if (data.needsReauth) {
+          setNeedsReauth(true);
+          setMessage(data.error ?? "Please sign out and sign back in to grant repository access.");
+        } else {
+          const hint = data.hint ? ` ${data.hint}` : "";
+          const detail = data.details?.length ? ` (${data.details[0].slice(0, 120)})` : "";
+          setMessage((data.error ?? "Something went wrong") + hint + detail);
+        }
         return;
       }
 
@@ -124,9 +130,20 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
         )}
       </button>
       {state === "error" && message && (
-        <div className="flex items-start gap-2 rounded-lg border border-crusoe/20 bg-crusoe/[0.05] px-3 py-2">
-          <AlertCircle size={12} className="mt-0.5 shrink-0 text-crusoe/70" />
-          <p className="text-[11px] text-crusoe/70">{message}</p>
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 rounded-lg border border-crusoe/20 bg-crusoe/[0.05] px-3 py-2">
+            <AlertCircle size={12} className="mt-0.5 shrink-0 text-crusoe/70" />
+            <p className="text-[11px] text-crusoe/70">{message}</p>
+          </div>
+          {needsReauth && (
+            <a
+              href="/api/auth/signin"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-sage/30 bg-sage/10 px-3 py-1.5 text-[11px] font-bold text-sage transition hover:bg-sage/20"
+            >
+              <LogOut size={11} />
+              Sign in again with repo access
+            </a>
+          )}
         </div>
       )}
     </div>
