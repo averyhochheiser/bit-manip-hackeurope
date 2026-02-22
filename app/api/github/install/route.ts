@@ -69,49 +69,70 @@ async function putFile(
   branch?: string,
   retries = 3,
 ): Promise<{ ok: boolean; status: number; error?: string }> {
-  const headers = {
+  const getHeaders = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
+  };
+  const putHeaders = {
+    ...getHeaders,
     "Content-Type": "application/json",
   };
 
   for (let attempt = 0; attempt < retries; attempt++) {
-    // Check if file already exists (to get its SHA for update)
-    const getRes = await fetch(
-      `https://api.github.com/repos/${repo}/contents/${path}${branch ? `?ref=${branch}` : ""}`,
-      { headers },
-    );
+    try {
+      // Check if file already exists (to get its SHA for update)
+      const getUrl = `https://api.github.com/repos/${repo}/contents/${path}${branch ? `?ref=${branch}` : ""}`;
+      console.log(`[putFile] GET ${getUrl} (attempt ${attempt + 1})`);
+      const getRes = await fetch(getUrl, { headers: getHeaders });
+      console.log(`[putFile] GET status: ${getRes.status}`);
 
-    let sha: string | undefined;
-    if (getRes.ok) {
-      const existing = (await getRes.json()) as { sha?: string };
-      sha = existing.sha;
+      let sha: string | undefined;
+      if (getRes.ok) {
+        const existing = (await getRes.json()) as { sha?: string };
+        sha = existing.sha;
+        console.log(`[putFile] Existing file sha: ${sha}`);
+      } else {
+        // 404 = file doesn't exist yet, which is fine
+        // Consume the body to avoid connection issues
+        await getRes.text().catch(() => {});
+      }
+
+      const body: Record<string, unknown> = {
+        message,
+        content: Buffer.from(content).toString("base64"),
+      };
+      if (sha) body.sha = sha;
+      if (branch) body.branch = branch;
+
+      const putUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
+      console.log(`[putFile] PUT ${putUrl}`);
+      const res = await fetch(putUrl, {
+        method: "PUT",
+        headers: putHeaders,
+        body: JSON.stringify(body),
+      });
+      console.log(`[putFile] PUT status: ${res.status}`);
+
+      if (res.ok) {
+        return { ok: true, status: res.status };
+      }
+
+      // 409 = conflict (branch HEAD moved) — retry
+      if (res.status === 409 && attempt < retries - 1) {
+        console.log(`[putFile] 409 conflict, retrying in ${500 * (attempt + 1)}ms`);
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+
+      const err = await res.text().catch(() => "unknown error");
+      console.error(`[putFile] Failed: ${err.slice(0, 200)}`);
+      return { ok: false, status: res.status, error: err };
+    } catch (e) {
+      console.error(`[putFile] Exception on attempt ${attempt + 1}:`, e);
+      if (attempt >= retries - 1) {
+        return { ok: false, status: 500, error: e instanceof Error ? e.message : "Unknown error" };
+      }
     }
-
-    const body: Record<string, unknown> = {
-      message,
-      content: Buffer.from(content).toString("base64"),
-    };
-    if (sha) body.sha = sha;
-    if (branch) body.branch = branch;
-
-    const res = await fetch(
-      `https://api.github.com/repos/${repo}/contents/${path}`,
-      { method: "PUT", headers, body: JSON.stringify(body) },
-    );
-
-    if (res.ok) {
-      return { ok: true, status: res.status };
-    }
-
-    // 409 = conflict (branch HEAD moved between our GET and PUT) — retry
-    if (res.status === 409 && attempt < retries - 1) {
-      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-      continue;
-    }
-
-    const err = await res.text().catch(() => "unknown error");
-    return { ok: false, status: res.status, error: err };
   }
 
   return { ok: false, status: 500, error: "Max retries exceeded" };
@@ -317,7 +338,7 @@ export async function POST(req: Request) {
   if (!workflowResult.ok) {
     return NextResponse.json(
       {
-        error: "Failed to install Carbon Gate workflow",
+        error: `Failed to install Carbon Gate workflow (HTTP ${workflowResult.status})`,
         details: [workflowResult.error],
       },
       { status: 500 },
