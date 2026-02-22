@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { updateOverrideStatus, incrementRepoUsage } from "@/lib/override/queries";
 
 async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string;
@@ -81,6 +82,22 @@ export async function POST(request: Request) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
+
+      // Handle override purchase (one-time payment)
+      if (session.metadata?.override_id && session.mode === "payment") {
+        const overrideId = session.metadata.override_id;
+        const orgId = session.metadata.org_id;
+        const repo = session.metadata.repo;
+        const emissionsKg = parseFloat(session.metadata.emissions_kg || "0");
+
+        await updateOverrideStatus(overrideId, "approved");
+        if (orgId && repo && emissionsKg > 0) {
+          await incrementRepoUsage(orgId, repo, emissionsKg);
+        }
+        break;
+      }
+
+      // Handle subscription checkout
       if (session.subscription) {
         const sub = await stripe.subscriptions.retrieve(session.subscription as string);
         await handleSubscriptionCreated(sub);
