@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Carbon Gate - GitHub Action Script
 Reads carbon-gate.yml config, calls API, and posts PR comment
@@ -1516,8 +1516,8 @@ def format_override_section(result):
     override_info = check_override_eligibility({}, result)
 
     lines_out = []
-    lines_out.append("")
-    lines_out.append("### \u2699\ufe0f Override Options")
+    lines_out = []
+    lines_out.append("\n\n💳 **Override Options**")
     lines_out.append("")
 
     # Show billing API stats when available
@@ -1679,11 +1679,7 @@ Crusoe analyzed your code and found changes that could reduce compute time and e
             comment += format_override_section(result)
         except Exception as _e:
             print(f"::warning::format_override_section failed: {_e}")
-            comment += "
-
-**Override options:** Add the `carbon-override` label, or ask a repo admin.
-
-"
+            comment += "\n\n**Override options:** Add the `carbon-override` label, or ask a repo admin.\n\n"
 
     comment += f"""<sub>[Dashboard →]({dashboard_url}){timing_note} · Override: `{required_perm}` + justification via `carbon-override` label · 🌱</sub>"""
 
