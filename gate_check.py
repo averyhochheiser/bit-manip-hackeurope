@@ -841,18 +841,18 @@ Return the complete optimized files now:"""
                 "\u274c Could not parse optimized code from AI response. "
                 "The AI may not have followed the expected format.\n\n"
                 "<details>\n<summary>Raw AI Response</summary>\n\n"
-                f"```\n{{ai_text[:2000]}}\n```\n\n</details>"
+                f"```\n{ai_text[:2000]}\n```\n\n</details>"
             )
             return
 
-    output(f"Generated optimized code for {{len(optimized_files)}} file(s)", "success")
+    output(f"Generated optimized code for {len(optimized_files)} file(s)", "success")
 
     # Get PR branch info
     headers_gh = {
-        "Authorization": f"Bearer {{github_token}}",
+        "Authorization": f"Bearer {github_token}",
         "Accept": "application/vnd.github.v3+json",
     }
-    pr_url = f"https://api.github.com/repos/{{repo}}/pulls/{{pr_number}}"
+    pr_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
     pr_resp = requests.get(pr_url, headers=headers_gh, timeout=10)
     if not pr_resp.ok:
         _post_reply("\u274c Could not fetch PR info from GitHub API.")
@@ -865,26 +865,26 @@ Return the complete optimized files now:"""
     for filename, new_content in optimized_files.items():
         # Skip if content is identical
         if filename in file_contents and new_content.strip() == file_contents[filename].strip():
-            output(f"  Skipped {{filename}} (no changes)", "info")
+            output(f"  Skipped {filename} (no changes)", "info")
             continue
 
         try:
             # Get current file SHA
-            file_url = f"https://api.github.com/repos/{{repo}}/contents/{{filename}}?ref={{branch}}"
+            file_url = f"https://api.github.com/repos/{repo}/contents/{filename}?ref={branch}"
             file_resp = requests.get(file_url, headers=headers_gh, timeout=10)
             if not file_resp.ok:
-                output(f"  Could not get SHA for {{filename}}", "warn")
+                output(f"  Could not get SHA for {filename}", "warn")
                 continue
             file_sha = file_resp.json()["sha"]
 
             # Commit the optimized file
             encoded = base64.b64encode(new_content.encode("utf-8")).decode("ascii")
-            update_url = f"https://api.github.com/repos/{{repo}}/contents/{{filename}}"
+            update_url = f"https://api.github.com/repos/{repo}/contents/{filename}"
             update_resp = requests.put(
                 update_url,
                 headers=headers_gh,
                 json={
-                    "message": f"\u26a1 Carbon Gate: optimize {{filename}} for energy efficiency",
+                    "message": f"\u26a1 Carbon Gate: optimize {filename} for energy efficiency",
                     "content": encoded,
                     "sha": file_sha,
                     "branch": branch,
@@ -893,22 +893,22 @@ Return the complete optimized files now:"""
             )
             if update_resp.ok:
                 committed.append(filename)
-                output(f"  Committed optimized {{filename}}", "success")
+                output(f"  Committed optimized {filename}", "success")
             else:
-                output(f"  Failed to commit {{filename}}: {{update_resp.status_code}}", "warn")
+                output(f"  Failed to commit {filename}: {update_resp.status_code}", "warn")
         except Exception as e:
-            output(f"  Error committing {{filename}}: {{e}}", "warn")
+            output(f"  Error committing {filename}: {e}", "warn")
 
     if committed:
-        file_list = "\n".join(f"- `{{f}}`" for f in committed)
+        file_list = "\n".join(f"- `{f}`" for f in committed)
         _post_reply(
             "\u26a1 **Crusoe efficiency patch applied!**\n\n"
-            f"Optimized code has been committed to branch `{{branch}}`:\n\n{{file_list}}\n\n"
+            f"Optimized code has been committed to branch `{branch}`:\n\n{file_list}\n\n"
             "Changes include: mixed-precision training, efficient data loading, "
             "gradient checkpointing, early stopping, and other carbon-reducing improvements.\n\n"
             "Please review the changes and re-run the carbon gate check."
         )
-        output(f"Efficiency patch committed: {{len(committed)}} file(s)", "success")
+        output(f"Efficiency patch committed: {len(committed)} file(s)", "success")
     else:
         _post_reply(
             "\u26a0\ufe0f AI generated optimizations but no files were changed. "
