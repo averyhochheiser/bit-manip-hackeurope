@@ -306,11 +306,11 @@ export async function POST(req: Request) {
       { status: 401 },
     );
   }
-  if (!scopes.includes("repo")) {
-    console.warn(`[install-carbon-gate] Token missing 'repo' scope, scopes="${scopes}"`);
+  if (!scopes.includes("repo") || !scopes.includes("workflow")) {
+    console.warn(`[install-carbon-gate] Token missing 'repo' or 'workflow' scope, scopes="${scopes}"`);
     return NextResponse.json(
       {
-        error: "Missing repo permission — sign out and sign back in to grant write access to your repositories.",
+        error: "Missing repo or workflow permission — sign out and sign back in to grant write access to your repositories and workflows.",
         needsReauth: true,
       },
       { status: 403 },
@@ -397,7 +397,7 @@ export async function POST(req: Request) {
   const workflowResult = await putFile(
     ghToken,
     canonicalRepo,
-    "cool/carbon-gate.yml",
+    ".github/workflows/carbon-gate.yml",
     WORKFLOW_YAML,
     "ci: add Carbon Gate workflow",
     targetBranch,
