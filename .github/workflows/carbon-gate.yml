@@ -1,11 +1,16 @@
-name: Carbon Gate Check
+name: Carbon Gate
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    paths:
-      - "**.py"
-      - "carbon-gate.yml"
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to re-check (set automatically after patch apply)"
+        required: false
+        default: ""
 
 permissions:
   pull-requests: write
@@ -13,8 +18,9 @@ permissions:
 
 jobs:
   carbon-gate:
-    runs-on: ubuntu-latest
     name: Check Carbon Emissions
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
@@ -23,9 +29,85 @@ jobs:
           fetch-depth: 0
 
       - name: Run Carbon Gate
-        uses: ./ # Uses the action in this repo
+        uses: ./
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           api-endpoint: ${{ secrets.CARBON_GATE_API_ENDPOINT }}
           org-api-key: ${{ secrets.CARBON_GATE_ORG_KEY }}
           crusoe-api-key: ${{ secrets.CRUSOE_API_KEY }}
+          override-signing-secret: ${{ secrets.OVERRIDE_SIGNING_SECRET }}
+          pr-number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+
+  apply-patch:
+    name: Apply Crusoe Efficiency Patch
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '/apply-crusoe-patch')
+
+    steps:
+      - name: React to comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket',
+            });
+
+      - name: Get PR branch
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            core.setOutput('head_ref', pr.data.head.ref);
+            core.setOutput('pr_author', pr.data.user.login);
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install requests pyyaml numpy scipy
+
+      - name: Apply Crusoe patch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CRUSOE_API_KEY: ${{ secrets.CRUSOE_API_KEY }}
+          API_ENDPOINT: ${{ secrets.CARBON_GATE_API_ENDPOINT }}
+          ORG_API_KEY: ${{ secrets.CARBON_GATE_ORG_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          PR_AUTHOR: ${{ steps.pr.outputs.pr_author }}
+          APPLY_PATCH_REQUESTED: "true"
+        run: python gate_check.py
+
+      - name: Trigger carbon gate re-check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'carbon-gate.yml',
+              ref: '${{ steps.pr.outputs.head_ref }}',
+              inputs: {
+                pr_number: String(context.issue.number),
+              },
+            });
+            console.log('Triggered carbon gate re-check on ${{ steps.pr.outputs.head_ref }} for PR #' + context.issue.number);

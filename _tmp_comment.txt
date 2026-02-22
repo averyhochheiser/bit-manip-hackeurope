@@ -1,0 +1,120 @@
+def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: Optional[str] = None, suggestions_ai_powered: bool = True):
+    """Format the Carbon Gate report as a concise PR comment."""
+    _GPU_TDP_REF = {"H100": 700, "A100": 400, "V100": 300, "A10": 150, "A10G": 150, "T4": 70, "L40": 300}
+    emissions = result["emissions_kg"]
+    crusoe_emissions = result["crusoe_emissions_kg"]
+    status = result["status"]
+    optimal_window = result.get("optimal_window", "")
+    carbon_intensity = result.get("carbon_intensity", 0)
+
+    threshold_kg = config.get("threshold_kg_co2", 2.0)
+    warn_kg = config.get("warn_kg_co2", 1.0)
+
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app")
+    dashboard_url = f"{api_endpoint}/dashboard"
+
+    if status == "block":
+        status_emoji = "🔴"
+        status_label = "BLOCKED"
+        limit_note = f"exceeds {threshold_kg} kg block threshold — merge blocked"
+    elif status == "warn":
+        status_emoji = "🟡"
+        status_label = "WARNING"
+        limit_note = f"above {warn_kg} kg warning threshold (block at {threshold_kg} kg)"
+    else:
+        status_emoji = "🟢"
+        status_label = "PASSED"
+        limit_note = f"within limits (warn: {warn_kg} kg, block: {threshold_kg} kg)"
+
+    savings_pct = int(((emissions - crusoe_emissions) / emissions) * 100) if emissions > 0 else 0
+    gpu_hourly_rate = {"A100": 3.55, "H100": 4.10, "V100": 2.48, "A10": 1.12}
+    current_cost = gpu_hourly_rate.get(config.get("gpu", "A100"), 3.55) * config.get("estimated_hours", 1.0)
+    crusoe_cost = current_cost * 1.15
+    cost_diff_pct = ((crusoe_cost - current_cost) / current_cost) * 100
+
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+
+    # Header + Crusoe comparison table
+    comment = f"""## {status_emoji} Carbon Gate — {status_label}
+
+**{emissions:.2f} kgCO₂eq** — {limit_note}
+[View full report & repo stats →]({dashboard_url})
+
+---
+
+| | Current | Crusoe (Geothermal) | |
+|--|---------|---------------------|--|
+| **Emissions** | {emissions:.2f} kgCO₂eq | {crusoe_emissions:.2f} kgCO₂eq | **-{savings_pct}%** ✅ |
+| **Energy** | Grid mix ({carbon_intensity} gCO₂/kWh) | 100% geothermal (5 gCO₂/kWh) | Clean |
+| **Cost** | ${current_cost:.2f} | ${crusoe_cost:.2f} | +{cost_diff_pct:.0f}% |
+
+"""
+
+    # Crusoe AI CTA — no suggestions/patch shown here; explanation comes after /apply-crusoe-patch
+    if suggestions:
+        ai_note = "Crusoe Cloud geothermal inference (~5 gCO₂/kWh)" if suggestions_ai_powered else "static analysis"
+        has_patch = bool(patch)
+
+        suggestion_count = sum(
+            1 for line in suggestions.splitlines()
+            if line.strip() and line.strip()[0].isdigit() and ". " in line[:5]
+        )
+        count_str = f"{suggestion_count} optimization{'s' if suggestion_count != 1 else ''}" if suggestion_count else "optimizations"
+
+        comment += f"""---
+
+### 🧠 Crusoe AI: {count_str} found
+
+> *Powered by [{ai_note}](https://crusoe.ai)*
+
+Crusoe analyzed your code and found changes that could reduce compute time and emissions.
+{'A ready-to-apply patch is available.' if has_patch else 'Manual suggestions are available.'}
+
+**Comment below — Crusoe will apply the changes and explain what it did:**
+```
+/apply-crusoe-patch
+```
+
+"""
+
+    # Technical details (collapsed)
+    comment += f"""---
+
+<details>
+<summary>🔍 Technical details & methodology</summary>
+
+| Parameter | Value | Source |
+|-----------|-------|--------|
+| GPU | {config.get('gpu', 'A100')} ({_GPU_TDP_REF.get(config.get('gpu', 'A100'), '?')}W TDP) | NVIDIA datasheet |
+| Training time | {config.get('estimated_hours', 1.0)} h | carbon-gate.yml |
+| PUE | {result.get('pue_used', 1.1):.4f} ± {result.get('pue_sigma', 0):.4f} | Carnot-cycle thermodynamic model |
+| Thermal throttling | -{result.get('throttle_adjustment_pct', 0):.1f}% | Coupled ODE (scipy RK45) |
+| Region | {config.get('region', 'us-east-1')} | carbon-gate.yml |
+| Grid intensity | {carbon_intensity} ± {result.get('intensity_sigma', 0):.0f} gCO₂/kWh | {result.get('intensity_source', 'regional baseline').replace('_', ' ').title()} |
+| Operational | {result.get('operational_kg', emissions * 0.95):.4f} kgCO₂eq | energy × intensity |
+| Embodied | {result.get('embodied_kg', emissions * 0.05):.4f} kgCO₂eq | lifecycle amortisation (±30%) |
+| Uncertainty | ± {result.get('emissions_sigma', 0):.4f} kgCO₂eq | quadrature propagation |
+
+**Calculation pipeline:**
+1. PUE from Carnot efficiency: COP = η × T_cold / (T_hot − T_cold)
+2. Thermal throttling via coupled ODE (RK45)
+3. Operational CO₂ = ∫P(t)dt × PUE × grid_intensity / 1000
+4. Embodied carbon = C_mfg / (lifetime_h × utilisation)
+5. Total = Operational + Embodied, σ = √(σ_op² + σ_emb²)
+
+</details>
+
+"""
+
+    security_config = config.get("security", {})
+    required_perm = security_config.get("override_permission", "admin")
+    timing_note = ""
+    if optimal_window and len(optimal_window) > 20 and "no significant" not in optimal_window.lower():
+        timing_note = f" · ⏰ {optimal_window[:80]}"
+
+    comment += f"""<sub>[Dashboard →]({dashboard_url}){timing_note} · Override: `{required_perm}` + justification via `carbon-override` label · 🌱</sub>"""
+
+    return comment
+
+
+def post_pr_comment(comment):

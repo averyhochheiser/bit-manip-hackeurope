@@ -5,15 +5,30 @@ import { Zap, Check, Loader2, AlertCircle, ExternalLink, Key, Copy, LogOut } fro
 
 type InstallButtonProps = {
   repo: string;
+  onInstalled?: (repo: string) => void;
 };
 
-export function InstallCarbonGate({ repo }: InstallButtonProps) {
-  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+function isRepoInstalled(repo: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem("carbon-gate-installed-repos");
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    return list.includes(repo);
+  } catch {
+    return false;
+  }
+}
+
+export function InstallCarbonGate({ repo, onInstalled }: InstallButtonProps) {
+  const alreadyInstalled = isRepoInstalled(repo);
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
+    alreadyInstalled ? "done" : "idle"
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [orgApiKey, setOrgApiKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
-  const [secretCreated, setSecretCreated] = useState(false);
+  const [secretCreated, setSecretCreated] = useState(alreadyInstalled);
 
   async function handleInstall() {
     setState("loading");
@@ -44,6 +59,7 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
       setMessage(data.message);
       if (data.secretCreated) setSecretCreated(true);
       if (data.orgApiKey) setOrgApiKey(data.orgApiKey);
+      onInstalled?.(repo);
     } catch (err) {
       setState("error");
       setMessage(err instanceof Error ? err.message : "Network error");

@@ -36,8 +36,8 @@ export default async function LeaderboardPage() {
               Global Impact
             </h1>
             <p className="mt-2 max-w-lg text-sm text-floral/50">
-              Teams and open-source projects making every PR carbon-aware. Ranked by gate checks run and
-              emissions avoided via Crusoe&apos;s clean compute infrastructure.
+              Teams and open-source projects making every PR carbon-aware. Ranked by
+              kgCO₂e avoided — blocked jobs + Crusoe clean-compute savings.
             </p>
           </div>
           <div className="hidden shrink-0 items-center gap-2 rounded-full border border-crusoe/25 bg-crusoe/[0.06] px-4 py-2 text-xs font-semibold text-crusoe md:flex">
@@ -74,7 +74,7 @@ export default async function LeaderboardPage() {
                 </h2>
               </div>
               <p className="mb-3 text-xs text-floral/35">
-                Individual developers ranked by gate checks across all repos and orgs.
+                Individual developers ranked by carbon emissions avoided across all repos and orgs.
               </p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {contributorBoard.length === 0 ? (
@@ -119,7 +119,7 @@ export default async function LeaderboardPage() {
                   </h2>
                 </div>
                 <p className="mb-3 text-xs text-floral/35">
-                  Repos where multiple organisations run gate checks — great for open-source projects.
+                  Repos ranked by total carbon avoided — great for open-source projects.
                 </p>
                 <div className="space-y-2">
                   {repoBoard.length === 0 ? (
@@ -135,19 +135,6 @@ export default async function LeaderboardPage() {
           </div>
         )}
 
-        {/* CTA */}
-        <div className="mt-16 rounded-2xl border border-floral/[0.06] bg-floral/[0.02] p-8 text-center">
-          <p className="text-sm font-semibold text-floral/70">Want your team on this board?</p>
-          <p className="mt-1 text-xs text-floral/40">
-            Add Carbon Gate to any repo in 5 minutes. Works with private and open-source projects.
-          </p>
-          <a
-            href="/api/auth/signin"
-            className="mt-4 inline-flex items-center rounded-full border border-sage/30 bg-sage/10 px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-sage transition hover:bg-sage/20"
-          >
-            Sign in with GitHub
-          </a>
-        </div>
       </div>
     </main>
   );
@@ -184,10 +171,12 @@ function OrgRow({
         )}
       </div>
       <div className="hidden shrink-0 text-right sm:block">
-        <p className="text-sm font-semibold text-floral">{entry.gateCount} gates</p>
-        {entry.savedKg > 0 && (
-          <p className="text-xs text-sage">{entry.savedKg.toFixed(1)} kg saved</p>
+        {entry.savedKg > 0 ? (
+          <p className="text-sm font-semibold text-sage">{entry.savedKg.toFixed(2)} kg saved</p>
+        ) : (
+          <p className="text-sm font-semibold text-floral/40">0 kg saved</p>
         )}
+        <p className="text-xs text-floral/35">{entry.gateCount} gate {entry.gateCount === 1 ? "check" : "checks"}</p>
       </div>
     </div>
   );
