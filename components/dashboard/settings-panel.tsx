@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { GitBranch, Users, Building2, Plus, Trash2, Shield, Zap, Globe, ChevronRight, Key, Copy } from "lucide-react";
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Types ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 type TierInfo = {
   id: string;
@@ -29,7 +29,7 @@ type SettingsPanelProps = {
   orgApiKey?: string;
 };
 
-// ── Tier card colours ────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Tier card colours ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 const TIER_STYLES: Record<string, { border: string; bg: string; accent: string; badge: string }> = {
   free:       { border: "border-floral/15", bg: "bg-floral/[0.03]", accent: "text-floral/60", badge: "bg-floral/10 text-floral/60" },
@@ -37,7 +37,7 @@ const TIER_STYLES: Record<string, { border: string; bg: string; accent: string; 
   enterprise: { border: "border-crusoe/30", bg: "bg-crusoe/[0.04]", accent: "text-crusoe",    badge: "bg-crusoe/15 text-crusoe" },
 };
 
-// ── Component ────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Component ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 export function SettingsPanel({
   defaultBudgetKg,
@@ -115,7 +115,7 @@ export function SettingsPanel({
         ))}
       </div>
 
-      {/* ── Billing & Tiers tab ── */}
+      {/* ΓöÇΓöÇ Billing & Tiers tab ΓöÇΓöÇ */}
       {activeTab === "billing" && (
         <div className="space-y-6">
           {/* Current plan banner */}
@@ -135,7 +135,7 @@ export function SettingsPanel({
               </div>
               <div className="text-right">
                 <p className="font-monoData text-lg font-bold text-floral">
-                  {usedKg.toFixed(1)}<span className="text-xs text-floral/40">/{tier.includedKg} kgCO₂e</span>
+                  {usedKg.toFixed(1)}<span className="text-xs text-floral/40">/{tier.includedKg} kgCOΓéée</span>
                 </p>
                 <div className="mt-2 h-1.5 w-32 overflow-hidden rounded-full bg-white/[0.05]">
                   <div
@@ -186,7 +186,7 @@ export function SettingsPanel({
                     <div className="mt-4 space-y-2 text-[11px] text-floral/55">
                       <div className="flex items-center gap-2">
                         <Zap size={10} className={style.accent} />
-                        <span><strong className="text-floral/80">{t.includedKg}</strong> kgCO₂e/mo included</span>
+                        <span><strong className="text-floral/80">{t.includedKg}</strong> kgCOΓéée/mo included</span>
                       </div>
                       {t.hardCapKg > 0 && (
                         <div className="flex items-center gap-2">
@@ -209,7 +209,7 @@ export function SettingsPanel({
                       {t.sbtiReduction && (
                         <div className="flex items-center gap-2">
                           <Shield size={10} className="text-sage/60" />
-                          <span>SBTi 1.5°C pathway (−4.2%/yr)</span>
+                          <span>SBTi 1.5┬░C pathway (ΓêÆ4.2%/yr)</span>
                         </div>
                       )}
                       <div className="flex items-center gap-2">
@@ -246,19 +246,19 @@ export function SettingsPanel({
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 text-[11px] leading-relaxed text-floral/50">
               <div className="space-y-1">
                 <p className="font-semibold text-floral/70">EU ETS Phase IV</p>
-                <p>Overage pricing mirrors the EU carbon market (~€85/tCO₂). Your internal carbon cost matches the real economic cost of emissions.</p>
+                <p>Overage pricing mirrors the EU carbon market (~Γé¼85/tCOΓéé). Your internal carbon cost matches the real economic cost of emissions.</p>
               </div>
               <div className="space-y-1">
                 <p className="font-semibold text-floral/70">EU Taxonomy (DNSH)</p>
-                <p>Free tier hard cap at 75 kgCO₂e — based on &quot;Do No Significant Harm&quot; threshold for small-scale ICT (100 gCO₂e/kWh × typical SME GPU compute).</p>
+                <p>Free tier hard cap at 75 kgCOΓéée ΓÇö based on &quot;Do No Significant Harm&quot; threshold for small-scale ICT (100 gCOΓéée/kWh ├ù typical SME GPU compute).</p>
               </div>
               <div className="space-y-1">
                 <p className="font-semibold text-floral/70">CSRD Reporting</p>
                 <p>Pro and Enterprise tiers include ESRS E1-compliant emission reports (Scope 3 Category 11) compatible with the Corporate Sustainability Reporting Directive.</p>
               </div>
               <div className="space-y-1">
-                <p className="font-semibold text-floral/70">SBTi 1.5°C Pathway</p>
-                <p>Enterprise tier enforces Science Based Targets initiative absolute contraction: −4.2% annual reduction to align with Paris Agreement goals.</p>
+                <p className="font-semibold text-floral/70">SBTi 1.5┬░C Pathway</p>
+                <p>Enterprise tier enforces Science Based Targets initiative absolute contraction: ΓêÆ4.2% annual reduction to align with Paris Agreement goals.</p>
               </div>
             </div>
           </div>
@@ -277,7 +277,7 @@ export function SettingsPanel({
         </div>
       )}
 
-      {/* ── Organisation tab ── */}
+      {/* ΓöÇΓöÇ Organisation tab ΓöÇΓöÇ */}
       {activeTab === "org" && (
         <div className="space-y-6">
           {/* API Key section */}
@@ -309,7 +309,7 @@ export function SettingsPanel({
           {/* Budget form */}
           <form className="space-y-4" onSubmit={onSubmit}>
           <label className="block text-sm text-floral/75">
-            Organisation monthly budget (kgCO₂e)
+            Organisation monthly budget (kgCOΓéée)
             <input
               type="number"
               value={budgetKg}
@@ -317,8 +317,8 @@ export function SettingsPanel({
               className="mt-3 w-full rounded border-[0.5px] border-[#FFF8F0]/10 bg-[#23282E] px-4 py-3 font-mono text-sm font-light text-[#FFF8F0] outline-none transition-colors focus:border-stoneware-turquoise"
             />
             <span className="mt-1 block text-[11px] text-floral/40">
-              Plan limit: {tier.includedKg} kgCO₂e/mo
-              {tier.hardCapKg > 0 && ` · Hard cap: ${tier.hardCapKg} kg (EU Taxonomy DNSH)`}
+              Plan limit: {tier.includedKg} kgCOΓéée/mo
+              {tier.hardCapKg > 0 && ` ┬╖ Hard cap: ${tier.hardCapKg} kg (EU Taxonomy DNSH)`}
             </span>
           </label>
           <label className="block text-sm font-light text-[#FFF8F0]/60">
@@ -347,7 +347,7 @@ export function SettingsPanel({
         </div>
       )}
 
-      {/* ── Repositories tab ── */}
+      {/* ΓöÇΓöÇ Repositories tab ΓöÇΓöÇ */}
       {activeTab === "repos" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -399,7 +399,7 @@ export function SettingsPanel({
         </div>
       )}
 
-      {/* ── Teams tab ── */}
+      {/* ΓöÇΓöÇ Teams tab ΓöÇΓöÇ */}
       {activeTab === "teams" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
