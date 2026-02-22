@@ -46,11 +46,12 @@ export default async function ReposPage() {
     allRepos.push({ ...r, hasGateData: true });
   }
 
-  // GitHub repos not in gate data
+  // GitHub repos not already covered by org gate data
   if (githubData?.repoReports) {
     for (const r of githubData.repoReports) {
       if (!gateRepoNames.has(r.repo)) {
-        allRepos.push({ ...r, hasGateData: false });
+        // Preserve hasGateData from cross-org repo-name lookup
+        allRepos.push({ ...r });
       }
     }
   }
