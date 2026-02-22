@@ -25,10 +25,7 @@ export default async function MarketingPage() {
   return (
     <main className="relative min-h-screen bg-[#23282E] overflow-x-hidden">
       <nav className="absolute inset-x-0 top-0 z-50">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 sm:px-8 lg:px-12">
-          <span className="rounded-full border border-white/25 bg-white/10 px-2.5 py-0.5 text-[10px] font-bold text-white/70 backdrop-blur-md">
-            BETA
-          </span>
+        <div className="mx-auto flex max-w-7xl items-center justify-end px-6 py-5 sm:px-8 lg:px-12">
           <div className="flex items-center gap-6">
             {user && (
               <>
