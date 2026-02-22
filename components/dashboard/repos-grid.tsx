@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ExternalLink, ShieldCheck, GitBranch } from "lucide-react";
 import { InstallCarbonGate } from "./install-carbon-gate";
+import { useState } from "react";
 
 type ReposGridProps = {
   activated: RepoReport[];
@@ -12,6 +13,19 @@ type ReposGridProps = {
 };
 
 export function ReposGrid({ activated, notActivated }: ReposGridProps) {
+  const [localActivated, setLocalActivated] = useState<RepoReport[]>(activated);
+  const [localNotActivated, setLocalNotActivated] = useState<RepoReport[]>(notActivated);
+
+  function handleInstalled(repoName: string) {
+    setLocalNotActivated((prev) => {
+      const repo = prev.find((r) => r.repo === repoName);
+      if (repo) {
+        setLocalActivated((act) => [...act, { ...repo, hasGateData: true }]);
+      }
+      return prev.filter((r) => r.repo !== repoName);
+    });
+  }
+
   return (
     <div className="space-y-8">
       {/* ── Activated repos ── */}
@@ -23,19 +37,19 @@ export function ReposGrid({ activated, notActivated }: ReposGridProps) {
           <div>
             <h2 className="text-sm font-semibold text-floral">Carbon Gate Active</h2>
             <p className="text-[11px] text-floral/40">
-              {activated.length} {activated.length === 1 ? "repository" : "repositories"} with gate checks running
+              {localActivated.length} {localActivated.length === 1 ? "repository" : "repositories"} with gate checks running
             </p>
           </div>
         </div>
 
-        {activated.length === 0 ? (
+        {localActivated.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.01] p-10 text-center">
             <p className="text-sm text-floral/40">No repos with Carbon Gate yet.</p>
             <p className="mt-1 text-xs text-floral/25">Install it on a repo below to get started.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {activated.map((repo, i) => (
+            {localActivated.map((repo, i) => (
               <ActivatedRepoCard key={repo.repo} repo={repo} index={i} />
             ))}
           </div>
@@ -43,7 +57,7 @@ export function ReposGrid({ activated, notActivated }: ReposGridProps) {
       </section>
 
       {/* ── Not activated repos ── */}
-      {notActivated.length > 0 && (
+      {localNotActivated.length > 0 && (
         <section>
           <div className="mb-4 flex items-center gap-3">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-floral/[0.05] border border-floral/10">
@@ -52,14 +66,14 @@ export function ReposGrid({ activated, notActivated }: ReposGridProps) {
             <div>
               <h2 className="text-sm font-semibold text-floral">Not Yet Activated</h2>
               <p className="text-[11px] text-floral/40">
-                {notActivated.length} {notActivated.length === 1 ? "repository" : "repositories"} — install Carbon Gate with one click
+                {localNotActivated.length} {localNotActivated.length === 1 ? "repository" : "repositories"} — install Carbon Gate with one click
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {notActivated.map((repo, i) => (
-              <NotActivatedRepoCard key={repo.repo} repo={repo} index={i} />
+            {localNotActivated.map((repo, i) => (
+              <NotActivatedRepoCard key={repo.repo} repo={repo} index={i} onInstalled={handleInstalled} />
             ))}
           </div>
         </section>
@@ -146,7 +160,7 @@ function ActivatedRepoCard({ repo, index }: { repo: RepoReport; index: number })
 
 /* ── Card for non-activated repos ── */
 
-function NotActivatedRepoCard({ repo, index }: { repo: RepoReport; index: number }) {
+function NotActivatedRepoCard({ repo, index, onInstalled }: { repo: RepoReport; index: number; onInstalled: (repoName: string) => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -173,7 +187,7 @@ function NotActivatedRepoCard({ repo, index }: { repo: RepoReport; index: number
       </div>
 
       <div className="mt-4">
-        <InstallCarbonGate repo={repo.repo} />
+        <InstallCarbonGate repo={repo.repo} onInstalled={onInstalled} />
       </div>
     </motion.div>
   );

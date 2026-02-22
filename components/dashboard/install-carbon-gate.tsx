@@ -5,9 +5,10 @@ import { Zap, Check, Loader2, AlertCircle, ExternalLink, Key, Copy, LogOut } fro
 
 type InstallButtonProps = {
   repo: string;
+  onInstalled?: (repo: string) => void;
 };
 
-export function InstallCarbonGate({ repo }: InstallButtonProps) {
+export function InstallCarbonGate({ repo, onInstalled }: InstallButtonProps) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [orgApiKey, setOrgApiKey] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
       setMessage(data.message);
       if (data.secretCreated) setSecretCreated(true);
       if (data.orgApiKey) setOrgApiKey(data.orgApiKey);
+      onInstalled?.(repo);
     } catch (err) {
       setState("error");
       setMessage(err instanceof Error ? err.message : "Network error");

@@ -77,21 +77,6 @@ export default async function DashboardPage() {
       <div className="space-y-4">
         <KpiStrip kpis={displayModel.kpis} />
 
-        {/* GitHub repos (owned + contributed) */}
-        {allRepoReports.length > 0 && (
-          <div>
-            <div className="mb-3 flex items-center gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-floral/40">Your repositories</p>
-              {hasGithubRepos && (
-                <span className="rounded-full bg-sage/[0.08] border border-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage">
-                  {allRepoReports.length} repos
-                </span>
-              )}
-            </div>
-            <RepoBreakdown reports={allRepoReports} />
-          </div>
-        )}
-
         {externalContribRepos.length > 0 && (
           /* ── Repos this user contributed to (other orgs) ── */
           <div>
