@@ -3,9 +3,6 @@ name: Carbon Gate Check
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    paths:
-      - "**.py"
-      - "carbon-gate.yml"
 
 permissions:
   pull-requests: write
@@ -14,7 +11,7 @@ permissions:
 jobs:
   carbon-gate:
     runs-on: ubuntu-latest
-    name: Check Carbon Emissions
+    name: carbon emissions
 
     steps:
       - name: Checkout repository
