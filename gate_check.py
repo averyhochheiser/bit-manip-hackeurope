@@ -690,7 +690,7 @@ def _post_patch_comment(success: bool, message: str):
         return
 
     if success:
-        comment = f"## ✅ Crusoe Efficiency Patch Applied\n\n{message}\n\n---\n<sub>Powered by [Crusoe Cloud](https://crusoe.ai) — geothermal-powered AI inference 🌱</sub>"
+        comment = f"## Crusoe Efficiency Patch Applied\n\n{message}\n\n---\n<sub>Powered by [Crusoe Cloud](https://crusoe.ai) — geothermal-powered AI inference</sub>"
     else:
         comment = f"## ❌ Crusoe Efficiency Patch Failed\n\n{message}\n\n---\n<sub>Powered by [Carbon Gate](https://github.com/averyhochheiser/bit-manip-hackeurope) 🌱</sub>"
 
@@ -1120,27 +1120,24 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, suggest
     threshold_kg = config.get("threshold_kg_co2", 2.0)
     warn_kg = config.get("warn_kg_co2", 1.0)
 
-    # Status emoji and header
+    # Status header
     if status == "block":
-        status_emoji = "🔴"
         status_label = "BLOCKED"
-        status_text = f"**Exceeds carbon threshold** ({threshold_kg} kg)"
+        status_text = f"Exceeds carbon threshold ({threshold_kg} kg)"
         status_message = (
             f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which exceeds your "
             f"organization's carbon threshold of {threshold_kg} kg. The PR merge is blocked until "
             f"emissions are reduced or an override is approved."
         )
     elif status == "warn":
-        status_emoji = "🟡"
         status_label = "WARNING"
-        status_text = f"**Approaching threshold** (warn: {warn_kg} kg, block: {threshold_kg} kg)"
+        status_text = f"Approaching threshold (warn: {warn_kg} kg, block: {threshold_kg} kg)"
         status_message = (
             f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which exceeds the "
             f"warning threshold of {warn_kg} kg. Consider the optimisation suggestions below to "
             f"reduce environmental impact before this approaches the block threshold of {threshold_kg} kg."
         )
     else:
-        status_emoji = "🟢"
         status_label = "PASSED"
         status_text = "Within acceptable limits"
         status_message = (
@@ -1164,7 +1161,7 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, suggest
     )
     crusoe_cost = current_cost * 1.15  # Crusoe typically ~15% more expensive
 
-    comment = f"""## {status_emoji} Carbon Gate — {status_label}
+    comment = f"""## Carbon Gate — {status_label}
 
 {status_message}
 
@@ -1191,7 +1188,7 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None, suggest
 
 | Comparison | Current Setup | Crusoe (Geothermal) | Improvement |
 |------------|---------------|---------------------|-------------|
-| **Emissions** | {emissions:.2f} kgCO₂eq | {crusoe_emissions:.2f} kgCO₂eq | **-{savings_pct}%** ✅ |
+| **Emissions** | {emissions:.2f} kgCO₂eq | {crusoe_emissions:.2f} kgCO₂eq | **-{savings_pct}%** |
 | **Energy Source** | Grid mix | 100% geothermal | Clean energy |
 | **Cost** | ${current_cost:.2f} | ${crusoe_cost:.2f} | +${crusoe_cost - current_cost:.2f} (+{cost_increase_pct:.1f}%) |
 | **Available GPUs** | — | `{crusoe_instance}` | Ready now |
@@ -1279,20 +1276,20 @@ Running your job when grid carbon intensity is lower can significantly reduce em
 
 """
 
-    
+    if status == "block":
         comment += f"""**This PR is currently blocked due to high emissions.** To proceed, you have these options:
 
-1. **🌿 Reroute to Crusoe** (Recommended) — Comment `/crusoe-run: [reason]` to use clean energy infrastructure
-2. **⏰ Optimize Timing** — {optimal_window}
-3. **⚡ Optimize Code** — Reduce training time through efficiency improvements
-4. **🏷️ Request Override** — Authorized team members can add the `carbon-override` label with justification{pay_option}
+1. **Reroute to Crusoe** (Recommended) — Comment `/crusoe-run: [reason]` to use clean energy infrastructure
+2. **Optimize Timing** — {optimal_window}
+3. **Optimize Code** — Reduce training time through efficiency improvements
+4. **Request Override** — Authorized team members can add the `carbon-override` label with justification
 """
     else:
         comment += f"""Consider these options to reduce environmental impact:
 
-1. ** Switch to Clean Energy** — Comment `/crusoe-run: [reason]` to use Crusoe's geothermal infrastructure ({savings_pct}% cleaner)
-2. ** Optimize timing** — {optimal_window}
-3. ** Improve efficiency** — Optimize code to reduce training time
+1. **Switch to Clean Energy** — Comment `/crusoe-run: [reason]` to use Crusoe's geothermal infrastructure ({savings_pct}% cleaner)
+2. **Optimize Timing** — {optimal_window}
+3. **Improve Efficiency** — Optimize code to reduce training time
 
 """
 
@@ -1313,7 +1310,7 @@ Running your job when grid carbon intensity is lower can significantly reduce em
 
     comment += f"""
 
-[Learn more about Carbon Gate](https://github.com/averyhochheiser/bit-manip-hackeurope) | **Building sustainable ML practices together** 🌱
+[Learn more about Carbon Gate](https://github.com/averyhochheiser/bit-manip-hackeurope)
 
 </sub>
 """
