@@ -78,10 +78,13 @@ async function putFile(
     "Content-Type": "application/json",
   };
 
+  // effectiveBranch may be cleared on 404 (empty repo — branch ref doesn't exist yet)
+  let effectiveBranch = branch;
+
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       // Check if file already exists (to get its SHA for update)
-      const getUrl = `https://api.github.com/repos/${repo}/contents/${path}${branch ? `?ref=${branch}` : ""}`;
+      const getUrl = `https://api.github.com/repos/${repo}/contents/${path}${effectiveBranch ? `?ref=${effectiveBranch}` : ""}`;
       console.log(`[putFile] GET ${getUrl} (attempt ${attempt + 1})`);
       const getRes = await fetch(getUrl, { headers: getHeaders });
       console.log(`[putFile] GET status: ${getRes.status}`);
@@ -102,10 +105,10 @@ async function putFile(
         content: Buffer.from(content).toString("base64"),
       };
       if (sha) body.sha = sha;
-      if (branch) body.branch = branch;
+      if (effectiveBranch) body.branch = effectiveBranch;
 
       const putUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
-      console.log(`[putFile] PUT ${putUrl}`);
+      console.log(`[putFile] PUT ${putUrl}${effectiveBranch ? ` (branch: ${effectiveBranch})` : " (no branch — empty repo)"}`);
       const res = await fetch(putUrl, {
         method: "PUT",
         headers: putHeaders,
@@ -121,6 +124,15 @@ async function putFile(
       if (res.status === 409 && attempt < retries - 1) {
         console.log(`[putFile] 409 conflict, retrying in ${500 * (attempt + 1)}ms`);
         await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+
+      // 404 with a branch specified = branch ref doesn't exist (empty repo).
+      // Retry without branch so GitHub creates the initial commit on HEAD.
+      if (res.status === 404 && effectiveBranch && attempt < retries - 1) {
+        console.log(`[putFile] 404 with branch "${effectiveBranch}" — repo may be empty; retrying without branch`);
+        await res.text().catch(() => {});
+        effectiveBranch = undefined;
         continue;
       }
 
@@ -167,10 +179,8 @@ async function putSecret(
     // 2. Encrypt the secret using NaCl sealed box
     const publicKeyBytes = Buffer.from(publicKeyB64, "base64");
     const secretBytes = Buffer.from(secretValue);
-    const encrypted = nacl.box.keyPair(); // only needed for seal
     // Use libsodium-style sealed box: ephemeral keypair + crypto_box
     const ephemeral = nacl.box.keyPair();
-    const nonce = new Uint8Array(nacl.box.nonceLength);
     // Derive nonce from ephemeral public key + recipient public key (simplified: use blake2 hash)
     // GitHub expects libsodium crypto_box_seal format. Let's build it:
     // sealed = ephemeral_pk || crypto_box(msg, nonce=blake2b(ephemeral_pk || recipient_pk), ephemeral_sk, recipient_pk)
