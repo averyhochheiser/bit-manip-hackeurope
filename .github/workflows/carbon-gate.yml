@@ -11,7 +11,7 @@ permissions:
 jobs:
   carbon-gate:
     runs-on: ubuntu-latest
-    name: Check Carbon Emissions
+    name: carbon emissions
 
     steps:
       - name: Checkout repository
