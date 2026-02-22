@@ -1407,6 +1407,43 @@ def call_gate_api(config):
     return result
 
 
+
+def format_override_section(result):
+    """Generate markdown for override options in PR comment."""
+    override_info = check_override_eligibility({}, result)
+    if not override_info:
+        return ""
+
+    lines_out = []
+    lines_out.append("")
+    lines_out.append("### \u2699\ufe0f Override Options")
+    lines_out.append("")
+    lines_out.append(f"| Metric | Value |")
+    lines_out.append(f"|--------|-------|")
+    lines_out.append(f"| Repo usage this month | {override_info.get('repo_usage_kg', 0):.1f} / {override_info.get('hard_cap_kg', 20)} kgCO\u2082 |")
+    lines_out.append(f"| Overrides used | {override_info.get('overrides_used', 0)} / {override_info.get('max_overrides', 5)} |")
+    lines_out.append("")
+
+    if override_info.get("allowed"):
+        otype = override_info.get("override_type")
+        if otype == "admin":
+            lines_out.append("\u2705 **Admin override available** \u2014 Add the `carbon-override` label to this PR to proceed.")
+            lines_out.append("")
+        elif otype == "paid":
+            cost = override_info.get("cost_usd", 0)
+            lines_out.append(f"\U0001f4b3 **Paid override available** \u2014 **${cost:.2f}** to unblock this PR.")
+            lines_out.append("")
+            lines_out.append("> Developers can pay to override the carbon gate when emissions exceed the repo budget.")
+            lines_out.append("> This revenue funds carbon offset programs. Ask a repo admin to initiate the override.")
+            lines_out.append("")
+    else:
+        reason = override_info.get("reason", "Override not available.")
+        lines_out.append(f"\u26d4 **Override not available:** {reason}")
+        lines_out.append("")
+
+    return "\n".join(lines_out)
+
+
 def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: Optional[str] = None, suggestions_ai_powered: bool = True):
     """Format the Carbon Gate report as a concise PR comment."""
     _GPU_TDP_REF = {"H100": 700, "A100": 400, "V100": 300, "A10": 150, "A10G": 150, "T4": 70, "L40": 300}
@@ -1523,6 +1560,11 @@ Crusoe analyzed your code and found changes that could reduce compute time and e
 
     comment += f"""<sub>[Dashboard →]({dashboard_url}){timing_note} · Override: `{required_perm}` + justification via `carbon-override` label · 🌱</sub>"""
 
+
+    # Add override options section when gate blocks
+    if result.get("status") == "block":
+        comment += format_override_section(result)
+
     return comment
 
 
@@ -1560,8 +1602,120 @@ def post_pr_comment(comment):
             print(comment)
 
 
+
+def check_override_eligibility(config, result):
+    """
+    Call the /api/override/check endpoint to see if the user can override the block.
+    Returns the API response dict, or None if the call fails.
+    """
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app").rstrip("/")
+    org_api_key = os.environ.get("ORG_API_KEY", "").strip()
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    pr_number = os.environ.get("PR_NUMBER", "")
+    pr_author = os.environ.get("PR_AUTHOR", "")
+
+    if not org_api_key or not repo or not pr_number:
+        return None
+
+    # Get the PR author's GitHub permission level
+    author_role = check_user_permission(pr_author) if pr_author else "none"
+
+    try:
+        resp = requests.post(
+            f"{api_endpoint}/api/override/check",
+            json={
+                "api_key": org_api_key,
+                "repo": repo,
+                "pr_number": int(pr_number),
+                "emissions_kg": result.get("emissions_kg", 0),
+                "github_user": pr_author,
+                "github_role": author_role,
+            },
+            timeout=10,
+        )
+        if resp.ok:
+            return resp.json()
+        else:
+            output(f"Override check API returned {resp.status_code}", "warn")
+            return None
+    except Exception as e:
+        output(f"Override check failed: {e}", "warn")
+        return None
+
+
+def request_admin_override(config, result, justification=None):
+    """
+    Call the /api/override/admin endpoint to log a free admin override.
+    Returns True if successful.
+    """
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app").rstrip("/")
+    org_api_key = os.environ.get("ORG_API_KEY", "").strip()
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    pr_number = os.environ.get("PR_NUMBER", "")
+    pr_author = os.environ.get("PR_AUTHOR", "")
+
+    if not org_api_key or not repo or not pr_number:
+        return False
+
+    try:
+        resp = requests.post(
+            f"{api_endpoint}/api/override/admin",
+            json={
+                "api_key": org_api_key,
+                "repo": repo,
+                "pr_number": int(pr_number),
+                "github_user": pr_author or "unknown",
+                "emissions_kg": result.get("emissions_kg", 0),
+                "justification": justification,
+            },
+            timeout=10,
+        )
+        return resp.ok
+    except Exception as e:
+        output(f"Admin override API failed: {e}", "warn")
+        return False
+
+
+def get_override_purchase_url(config, result, github_user, github_role, justification=None):
+    """
+    Call the /api/override/purchase endpoint to get a Stripe checkout URL.
+    Returns the checkout URL or None.
+    """
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app").rstrip("/")
+    org_api_key = os.environ.get("ORG_API_KEY", "").strip()
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    pr_number = os.environ.get("PR_NUMBER", "")
+
+    if not org_api_key or not repo or not pr_number:
+        return None
+
+    try:
+        resp = requests.post(
+            f"{api_endpoint}/api/override/purchase",
+            json={
+                "api_key": org_api_key,
+                "repo": repo,
+                "pr_number": int(pr_number),
+                "github_user": github_user,
+                "github_role": github_role,
+                "emissions_kg": result.get("emissions_kg", 0),
+                "justification": justification,
+            },
+            timeout=10,
+        )
+        if resp.ok:
+            data = resp.json()
+            return data.get("checkout_url")
+        else:
+            output(f"Override purchase API returned {resp.status_code}", "warn")
+            return None
+    except Exception as e:
+        output(f"Override purchase request failed: {e}", "warn")
+        return None
+
+
 def check_gate_status(config, result):
-    """Check if the gate should block the PR"""
+    """Check if the gate should block the PR, with override support"""
     status = result["status"]
     threshold_kg = config.get("threshold_kg_co2", 2.0)
     warn_kg = config.get("warn_kg_co2", 1.0)
@@ -1575,10 +1729,25 @@ def check_gate_status(config, result):
             f"Carbon Gate BLOCKED \u2014 estimated emissions of {emissions:.2f} kgCO\u2082eq exceed your {threshold_kg} kg threshold",
             "error",
         )
-        output(
-            f"To proceed: (1) review & apply the AI code suggestions from the PR comment, (2) add 'carbon-override' label for manual override, or (3) re-run after optimising your training code",
-            "info",
-        )
+
+        # Check override eligibility via API
+        override_info = check_override_eligibility(config, result)
+        if override_info:
+            output(f"Repo usage this month: {override_info.get('repo_usage_kg', 0):.1f} / {override_info.get('hard_cap_kg', 20)} kgCO\u2082", "info")
+            output(f"Overrides used: {override_info.get('overrides_used', 0)} / {override_info.get('max_overrides', 5)}", "info")
+
+            if override_info.get("allowed"):
+                otype = override_info.get("override_type")
+                if otype == "admin":
+                    output("Admin override available \u2014 add 'carbon-override' label to proceed", "info")
+                elif otype == "paid":
+                    cost = override_info.get("cost_usd", 0)
+                    output(f"Paid override available \u2014 ${cost:.2f} to unblock this PR", "info")
+            else:
+                output(f"Override not available: {override_info.get('reason', 'Unknown')}", "warn")
+        else:
+            output("To proceed: (1) apply AI code suggestions, (2) add 'carbon-override' label (admin only), or (3) optimise your code", "info")
+
         sys.exit(1)
     elif status == "warn":
         print()
@@ -1596,6 +1765,7 @@ def check_gate_status(config, result):
             f"Carbon Gate PASSED \u2014 {emissions:.2f} kgCO\u2082eq is within limits (warn: {warn_kg} kg, block: {threshold_kg} kg)",
             "success",
         )
+
 
 
 def main():
@@ -1621,7 +1791,19 @@ def main():
         output(override_check["reason"], "success")
         if override_check.get("justification"):
             output(f"Justification: {override_check['justification'][:100]}", "info")
-        output("Skipping carbon gate check (override approved)", "info")
+
+        # Log the admin override via API (tracks usage + enforces caps)
+        result_stub = {"emissions_kg": config.get("threshold_kg_co2", 2.0)}
+        api_logged = request_admin_override(
+            config, result_stub,
+            justification=override_check.get("justification"),
+        )
+        if api_logged:
+            output("Admin override logged to billing system", "info")
+        else:
+            output("Could not log override to billing API (proceeding anyway)", "warn")
+
+        output("Skipping carbon gate check (admin override approved)", "info")
         if OUTPUT_MODE != "json":
             print("=" * 80)
         sys.exit(0)
