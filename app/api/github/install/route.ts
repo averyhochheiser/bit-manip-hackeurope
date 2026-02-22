@@ -98,25 +98,32 @@ async function putFile(
       console.log(`[putFile] GET status: ${getRes.status}`);
 
       let sha: string | undefined;
+      // 409 on GET = repo is completely empty (no commits at all)
+      let isEmptyRepo = getRes.status === 409;
       if (getRes.ok) {
         const existing = (await getRes.json()) as { sha?: string };
         sha = existing.sha;
         console.log(`[putFile] Existing file sha: ${sha}`);
       } else {
-        await getRes.text().catch(() => {});
+        const getBody = await getRes.text().catch(() => "");
+        console.log(`[putFile] GET non-ok body: ${getBody.slice(0, 100)}`);
+        if (getRes.status === 409) {
+          console.log(`[putFile] Repo is empty (409), will omit branch from PUT`);
+        }
       }
 
-      // PUT: deliberately omit `branch` so GitHub commits to HEAD.
-      // This works for empty repos (creates initial commit + branch ref)
-      // and for repos with commits (updates the default branch).
+      // Include `branch` in PUT so GitHub commits to the right branch.
+      // Exception: empty repos (409 on GET) don't have a branch ref yet —
+      // omit it so GitHub auto-creates the initial commit on the default branch.
       const body: Record<string, unknown> = {
         message,
         content: Buffer.from(content).toString("base64"),
       };
       if (sha) body.sha = sha;
+      if (branch && !isEmptyRepo) body.branch = branch;
 
       const putUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
-      console.log(`[putFile] PUT ${putUrl}`);
+      console.log(`[putFile] PUT ${putUrl} (branch=${isEmptyRepo ? "omitted (empty repo)" : branch})`);
       const res = await fetch(putUrl, {
         method: "PUT",
         headers,
