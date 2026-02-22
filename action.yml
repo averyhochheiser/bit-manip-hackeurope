@@ -21,9 +21,8 @@ inputs:
     description: "Organization API key for Carbon Gate"
     required: true
   crusoe-api-key:
-    description: "Crusoe Cloud API key for AI-powered carbon-efficiency code suggestions. Defaults to Carbon Gate's shared key so users get AI suggestions out of the box."
+    description: "Crusoe Cloud API key for AI-powered carbon-efficiency code suggestions."
     required: false
-    default: "lIxn7VZKTy-stOb3MRot2g$2a$10$Oov3rMDTXwOpd0Em2xCQG.gfxGaCxSjHmecf1Yx7E5rDNe8SDbgbW"
 
 runs:
   using: "composite"
@@ -36,7 +35,7 @@ runs:
     - name: Install dependencies
       shell: bash
       run: |
-        pip install requests pyyaml
+        pip install requests pyyaml numpy scipy
 
     - name: Run Carbon Gate check
       shell: bash
@@ -50,5 +49,6 @@ runs:
         GITHUB_SHA: ${{ github.sha }}
         GITHUB_REF: ${{ github.ref }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       run: |
         python ${{ github.action_path }}/gate_check.py

@@ -50,6 +50,8 @@ export interface RepoReport {
   budgetKg: number;
   topContributor: string;
   totalGatesRun: number;
+  /** true when at least one gate event exists for this repo */
+  hasGateData?: boolean;
 }
 
 export interface DashboardReadModel {

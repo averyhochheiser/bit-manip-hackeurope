@@ -22,7 +22,9 @@
     "react": "latest",
     "react-dom": "latest",
     "stripe": "latest",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.0",

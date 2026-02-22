@@ -39,6 +39,14 @@ export function Footer() {
                                 </Link>
                             </li>
                             <li>
+                                <a
+                                    href="/leaderboard"
+                                    className="text-sm text-floral/50 transition hover:text-floral/80"
+                                >
+                                    Leaderboard
+                                </a>
+                            </li>
+                            <li>
                                 <Link
                                     href="/settings"
                                     className="text-sm text-floral/50 transition hover:text-floral/80"

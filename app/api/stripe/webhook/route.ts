@@ -3,20 +3,62 @@ import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
+/** Map Stripe price IDs to our tier IDs */
+function resolveTierFromSubscription(sub: Stripe.Subscription): string {
+  const priceId = sub.items.data[0]?.price.id;
+  if (!priceId) return "free";
+
+  // Check against env-configured price IDs
+  if (priceId === process.env.STRIPE_BASE_PRICE_ID) return "pro";
+  if (priceId === process.env.STRIPE_ENTERPRISE_PRICE_ID) return "enterprise";
+
+  // Fallback: check price metadata if set in Stripe dashboard
+  const tierMeta = sub.items.data[0]?.price.metadata?.tier;
+  if (tierMeta && ["free", "pro", "enterprise"].includes(tierMeta)) return tierMeta;
+
+  return "pro"; // Default paid tier
+}
+
 async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string;
   const meteredItem = subscription.items.data.find(
     (item) => item.price.recurring?.usage_type === "metered"
   );
+  const tierId = resolveTierFromSubscription(subscription);
 
   await supabaseAdmin
     .from("billing_profiles")
     .update({
       stripe_subscription_id: subscription.id,
       stripe_subscription_item_id: meteredItem?.id ?? null,
-      stripe_price_id: meteredItem?.price.id || subscription.items.data[0]?.price.id || null
+      stripe_price_id: meteredItem?.price.id || subscription.items.data[0]?.price.id || null,
+      tier: tierId,
     })
     .eq("stripe_customer_id", customerId);
+
+  // Update carbon_budget to match the tier's included amount
+  const { BILLING_TIERS } = await import("@/lib/billing/eu-tiers");
+  const tier = BILLING_TIERS[tierId];
+  if (tier) {
+    const { data: profile } = await supabaseAdmin
+      .from("billing_profiles")
+      .select("org_id")
+      .eq("stripe_customer_id", customerId)
+      .maybeSingle();
+
+    if (profile?.org_id) {
+      await supabaseAdmin.from("carbon_budget").upsert(
+        {
+          org_id: profile.org_id,
+          included_kg: tier.includedKg,
+          warning_pct: tier.warningPct,
+          period_start: new Date().toISOString(),
+          period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+        { onConflict: "org_id" }
+      );
+    }
+  }
 }
 
 async function handleInvoiceEvent(invoice: Stripe.Invoice) {
@@ -56,9 +98,32 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
       stripe_subscription_id: null,
       stripe_subscription_item_id: null,
       stripe_price_id: null,
-      payment_status: "canceled"
+      payment_status: "canceled",
+      tier: "free",
     })
     .eq("stripe_customer_id", customerId);
+
+  // Reset carbon budget to free tier limits
+  const { BILLING_TIERS } = await import("@/lib/billing/eu-tiers");
+  const freeTier = BILLING_TIERS.free;
+  const { data: profile } = await supabaseAdmin
+    .from("billing_profiles")
+    .select("org_id")
+    .eq("stripe_customer_id", customerId)
+    .maybeSingle();
+
+  if (profile?.org_id) {
+    await supabaseAdmin.from("carbon_budget").upsert(
+      {
+        org_id: profile.org_id,
+        included_kg: freeTier.includedKg,
+        warning_pct: freeTier.warningPct,
+        period_start: new Date().toISOString(),
+        period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      { onConflict: "org_id" }
+    );
+  }
 }
 
 export async function POST(request: Request) {

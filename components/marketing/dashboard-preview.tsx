@@ -4,8 +4,9 @@ import { CarbonBudgetProgressBar } from "@/components/dashboard/carbon-budget-pr
 import { ForecastCard } from "@/components/dashboard/forecast-card";
 import { GateHistoryTable } from "@/components/dashboard/gate-history-table";
 import { KpiStrip } from "@/components/dashboard/kpi-strip";
+import { RepoBreakdown } from "@/components/dashboard/repo-breakdown";
 import { ScrollFloat } from "@/components/marketing/scroll-float";
-import { MOCK_DASHBOARD } from "@/lib/dashboard/mock-data";
+import type { DashboardReadModel } from "@/lib/dashboard/types";
 
 const physicsMetrics = [
   {
@@ -31,84 +32,81 @@ const physicsMetrics = [
   }
 ];
 
-export function DashboardPreview() {
+type DashboardPreviewProps = {
+  data: DashboardReadModel;
+};
+
+export function DashboardPreview({ data }: DashboardPreviewProps) {
   return (
-    <section className="flex flex-col border-b-[0.5px] border-[#FFF8F0]/10 bg-[#23282E]">
-      <div className="relative border-b-[0.5px] border-[#FFF8F0]/10 p-6 lg:p-12">
-        <p className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50 lg:left-12 lg:top-12">
-          Functional Dashboard
-        </p>
-        <h2 className="mt-16 max-w-3xl text-3xl font-normal tracking-tight text-[#FFF8F0] sm:text-4xl">
-          Live policy enforcement, packaged as signal-rich bento blocks
+    <section className="relative py-16 sm:py-20">
+      <div className="mb-8">
+        <div className="flex items-center gap-3">
+          <p className="text-xs uppercase tracking-[0.2em] text-floral/55">Live dashboard preview</p>
+          {data.gateEvents.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-sage/20 bg-sage/10 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-sage">
+              <span className="h-1 w-1 animate-pulse rounded-full bg-sage" />
+              Live data
+            </span>
+          )}
+        </div>
+        <h2 className="mt-3 font-display text-3xl font-bold text-floral sm:text-4xl">
+          Every repo. Every team. One carbon ledger.
         </h2>
       </div>
 
-      <div className="flex border-b-[0.5px] border-[#FFF8F0]/10">
-        <ScrollFloat className="w-full">
-          <KpiStrip kpis={MOCK_DASHBOARD.kpis} />
+      <ScrollFloat>
+        <KpiStrip kpis={data.kpis} />
+      </ScrollFloat>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <ScrollFloat className="xl:col-span-8" delay={0.05}>
+          <CarbonBudgetProgressBar
+            usedKg={data.budget.usedKg}
+            budgetKg={data.budget.includedKg}
+            projectedKg={data.budget.projectedKg}
+          />
         </ScrollFloat>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12">
-        <div className="border-b-[0.5px] border-[#FFF8F0]/10 lg:col-span-8 lg:border-b-0 lg:border-r-[0.5px]">
-          <ScrollFloat className="h-full" delay={0.05}>
-            <CarbonBudgetProgressBar
-              usedKg={MOCK_DASHBOARD.budget.usedKg}
-              budgetKg={MOCK_DASHBOARD.budget.includedKg}
-              projectedKg={MOCK_DASHBOARD.budget.projectedKg}
-            />
+        <ScrollFloat className="xl:col-span-4" delay={0.1}>
+          <ForecastCard />
+        </ScrollFloat>
+
+        {data.repoReports.length > 0 && (
+          <ScrollFloat className="xl:col-span-12" delay={0.12}>
+            <RepoBreakdown reports={data.repoReports} />
           </ScrollFloat>
-        </div>
+        )}
 
-        <div className="border-b-[0.5px] border-[#FFF8F0]/10 lg:col-span-4 lg:border-b-0">
-          <ScrollFloat className="h-full" delay={0.1}>
-            <ForecastCard />
-          </ScrollFloat>
-        </div>
-
-        <div className="border-b-[0.5px] border-[#FFF8F0]/10 lg:col-span-6 lg:border-b-0 lg:border-r-[0.5px] lg:border-t-[0.5px]">
-          <ScrollFloat className="h-full" delay={0.15}>
-            <div className="relative h-full bg-[#23282E] p-6 lg:p-10">
-              <h3 className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50 lg:left-10 lg:top-10">
-                Physics Stats
-              </h3>
-              <div className="mt-16 flex flex-col border-[0.5px] border-[#FFF8F0]/10">
-                {physicsMetrics.map((metric, i) => (
-                  <div
-                    key={metric.label}
-                    className={`relative p-5 ${i !== physicsMetrics.length - 1 ? "border-b-[0.5px] border-[#FFF8F0]/10" : ""} ${metric.accent
-                      ? "bg-stoneware-bordeaux/10 border-l-2 border-l-stoneware-bordeaux"
-                      : "bg-[#23282E]"
-                      }`}
-                  >
-                    <div className="flex items-baseline justify-between mb-2">
-                      <p className="text-[10px] uppercase tracking-widest text-[#FFF8F0]/50">
-                        {metric.label}
-                      </p>
-                      <p className="font-mono text-[10px] text-[#FFF8F0]/30">
-                        {metric.equation}
-                      </p>
-                    </div>
-                    <p
-                      className={`font-mono text-xl font-light ${metric.accent ? "text-stoneware-bordeaux" : "text-[#FFF8F0]"}`}
-                    >
-                      {metric.value}
-                    </p>
-                    <p className="mt-1 text-xs font-light text-[#FFF8F0]/50">
-                      {metric.hint}
-                    </p>
+        <ScrollFloat className="xl:col-span-6" delay={0.15}>
+          <div className="panel p-5">
+            <h3 className="text-base font-semibold text-floral">Physics Stats</h3>
+            <div className="mt-4 space-y-3">
+              {physicsMetrics.map((metric) => (
+                <div
+                  key={metric.label}
+                  className={
+                    metric.accent
+                      ? "rounded-xl border border-mauve/30 bg-mauve/10 p-3 shadow-insetGlow"
+                      : "panel-muted p-3"
+                  }
+                >
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-xs uppercase tracking-[0.14em] text-floral/55">{metric.label}</p>
+                    <p className="font-monoData text-[11px] text-floral/35">{metric.equation}</p>
                   </div>
-                ))}
-              </div>
+                  <p className={`mt-1 font-monoData text-xl font-semibold ${metric.accent ? "text-mauve" : "text-floral"}`}>
+                    {metric.value}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-floral/40">{metric.hint}</p>
+                </div>
+              ))}
             </div>
-          </ScrollFloat>
-        </div>
+          </div>
+        </ScrollFloat>
 
-        <div className="lg:col-span-6 lg:border-t-[0.5px] lg:border-[#FFF8F0]/10">
-          <ScrollFloat className="h-full" delay={0.2}>
-            <GateHistoryTable events={MOCK_DASHBOARD.gateEvents} />
-          </ScrollFloat>
-        </div>
+        <ScrollFloat className="xl:col-span-6" delay={0.2}>
+          <GateHistoryTable events={data.gateEvents} />
+        </ScrollFloat>
       </div>
     </section>
   );
