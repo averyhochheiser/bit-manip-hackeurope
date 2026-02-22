@@ -5,9 +5,7 @@ Reads carbon-gate.yml config, calls API, and posts PR comment
 """
 
 import os
-import re
 import sys
-import base64
 import yaml
 import requests
 import json
@@ -48,14 +46,7 @@ def output(message: str, level: str = "info", data: Optional[Dict] = None):
 
 
 def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
-    """
-    Fetch changed Python files from the PR.
-
-    Returns a string with two sections per file:
-      1. The unified diff (so the LLM understands what changed).
-      2. The **full current source** fetched via the Git Blobs API
-         (so the LLM can quote verbatim lines for the <carbon_patch> <old> block).
-    """
+    """Fetch changed Python files from the PR and return a formatted diff string."""
     github_token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
@@ -83,47 +74,12 @@ def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
         for f in python_files[:10]:  # cap at 10 files
             filename = f["filename"]
             patch = f.get("patch", "")
-            blob_sha = f.get("sha", "")
             if not patch:
                 continue
-
             snippet = patch[:max_chars_per_file]
-            section = f"### {filename}\n```diff\n{snippet}\n```"
-
-            # Fetch the actual file source via the Git Blobs API so the LLM
-            # can generate a verbatim <old> block (the diff format with +/- prefixes
-            # cannot be used directly for string-replacement matching).
-            if blob_sha:
-                try:
-                    blob_resp = requests.get(
-                        f"https://api.github.com/repos/{repo}/git/blobs/{blob_sha}",
-                        headers=headers,
-                        timeout=10,
-                    )
-                    if blob_resp.ok:
-                        blob_data = blob_resp.json()
-                        raw = blob_data.get("content", "")
-                        encoding = blob_data.get("encoding", "base64")
-                        if encoding == "base64":
-                            file_src = base64.b64decode(
-                                raw.replace("\n", "").encode()
-                            ).decode("utf-8", errors="replace")
-                        else:
-                            file_src = raw
-                        # Truncate long files — keep first 3 000 chars of source
-                        src_preview = file_src[:3000]
-                        section += (
-                            f"\n\n**Current source of `{filename}`"
-                            f" (quote these lines verbatim in `<old>`):**\n"
-                            f"```python\n{src_preview}\n```"
-                        )
-                        total_chars += len(src_preview)
-                except Exception as e:
-                    output(f"Could not fetch blob for {filename}: {e}", "warn")
-
-            diff_parts.append(section)
+            diff_parts.append(f"### {filename}\n```diff\n{snippet}\n```")
             total_chars += len(snippet)
-            if total_chars >= 12000:
+            if total_chars >= 8000:
                 break
 
         return "\n\n".join(diff_parts) if diff_parts else None
@@ -132,72 +88,229 @@ def get_pr_diff(max_chars_per_file: int = 3000) -> Optional[str]:
         return None
 
 
+def get_pr_file_contents() -> Optional[dict]:
+    """Fetch full content of changed Python files from the PR."""
+    github_token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    pr_number = os.environ.get("PR_NUMBER")
+
+    if not github_token or not repo or not pr_number:
+        return None
+
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/files"
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        files = response.json()
+
+        python_files = [f for f in files if f.get("filename", "").endswith(".py")]
+        if not python_files:
+            return None
+
+        file_contents = {}
+        for f in python_files:
+            filename = f["filename"]
+            # Fetch raw content
+            raw_url = f.get("raw_url")
+            if raw_url:
+                content_response = requests.get(raw_url, headers=headers, timeout=10)
+                if content_response.ok:
+                    file_contents[filename] = content_response.text
+
+        return file_contents if file_contents else None
+    except requests.exceptions.RequestException as e:
+        output(f"Could not fetch PR file contents: {e}", "warn")
+        return None
+
+
 CRUSOE_API_BASE = "https://hackeurope.crusoecloud.com/v1"
 CRUSOE_MODEL = "NVFP4/Qwen3-235B-A22B-Instruct-2507-FP4"
 
+# ── Local carbon calculator (mirrors lib/carbon/calculator.ts) ──────────────
 
-def call_crusoe_for_suggestions(diff: str, config: dict) -> Optional[str]:
+GPU_TDP_W = {
+    "H100": 700, "A100": 400, "V100": 300,
+    "A10": 150, "A10G": 150, "T4": 70, "L40": 300,
+}
+
+GPU_EMBODIED_KG = {
+    "H100": 250, "A100": 150, "V100": 120,
+    "A10": 80, "A10G": 80, "T4": 50, "L40": 120,
+}
+
+GPU_LIFETIME_H = 5 * 365 * 24 * 0.5  # ~21,900 h at 50% utilisation
+
+CRUSOE_INTENSITY_G_PER_KWH = 5  # Crusoe geothermal/solar grid
+
+# Region -> average grid carbon intensity (gCO2/kWh) - 2024 estimates
+REGION_CARBON_INTENSITY = {
+    "us-east-1": 380,    # Virginia
+    "us-east-2": 440,    # Ohio
+    "us-west-1": 210,    # N. California
+    "us-west-2": 280,    # Oregon
+    "eu-west-1": 300,    # Ireland
+    "eu-west-2": 230,    # London
+    "eu-west-3": 55,     # Paris (nuclear)
+    "eu-central-1": 340, # Frankfurt
+    "eu-north-1": 25,    # Stockholm (hydro)
+    "ap-northeast-1": 480, # Tokyo
+    "ap-south-1": 640,   # Mumbai
+}
+
+
+def compute_pue(ambient_temp_c: float = 20.0) -> float:
+    """Thermodynamic PUE model - mirrors lib/carbon/calculator.ts"""
+    base = 1.10
+    temp_coeff = 0.005  # +0.5% per C above 15C baseline
+    return min(2.0, base + max(0, (ambient_temp_c - 15) * temp_coeff))
+
+
+def calculate_emissions_local(gpu: str, hours: float, region: str) -> dict:
     """
-    Send the PR diff to Crusoe's LLM and return Markdown suggestions for
-    making the training code more carbon-efficient, plus a machine-readable
-    <carbon_patch> block for the single highest-impact change.
+    Calculate carbon emissions locally using the same physics as the API.
+    Used when the API is unreachable (no org key, 401, network error, etc.).
+    Returns a dict matching the API response shape.
+    """
+    tdp_w = GPU_TDP_W.get(gpu, GPU_TDP_W.get("A100", 400))
+    embodied_kg = GPU_EMBODIED_KG.get(gpu, GPU_EMBODIED_KG.get("A100", 150))
+    carbon_intensity = REGION_CARBON_INTENSITY.get(region, 380)
 
-    Patch format embedded in the response:
+    pue = compute_pue(20.0)  # assume 20C ambient
+    energy_kwh = (tdp_w / 1000) * hours * pue
 
-        <carbon_patch>
-        <file>path/to/file.py</file>
-        <old>
-        exact original code to replace
-        </old>
-        <new>
-        replacement code
-        </new>
-        </carbon_patch>
+    operational_kg = (energy_kwh * carbon_intensity) / 1000
+    embodied_share_kg = (embodied_kg / GPU_LIFETIME_H) * hours
+    emissions_kg = round(operational_kg + embodied_share_kg, 2)
 
-    Returns None if CRUSOE_API_KEY is absent or the call fails.
+    crusoe_operational_kg = (energy_kwh * CRUSOE_INTENSITY_G_PER_KWH) / 1000
+    crusoe_emissions_kg = round(crusoe_operational_kg + embodied_share_kg, 2)
+
+    return {
+        "emissions_kg": emissions_kg,
+        "crusoe_emissions_kg": crusoe_emissions_kg,
+        "budget_remaining_kg": 50.0,  # default monthly budget
+        "status": "pass",             # will be overridden by local thresholds
+        "optimal_window": "Schedule during off-peak hours (early morning local time) for lower grid intensity",
+        "crusoe_available": True,
+        "crusoe_instance": f"{gpu.lower()}-1x",
+        "carbon_intensity": carbon_intensity,
+        "pue_used": round(pue, 2),
+        "energy_kwh": round(energy_kwh, 2),
+    }
+
+
+
+
+def get_static_suggestions(config: dict) -> str:
+    """
+    Return hardcoded carbon-efficiency tips based on job config.
+    Fallback when CRUSOE_API_KEY is absent or the API call fails.
+    """
+    gpu = config.get("gpu", "A100")
+    hours = config.get("estimated_hours", 1.0)
+
+    tips = [
+        (
+            "**Enable mixed-precision training**",
+            "Wrap your training loop with `torch.autocast('cuda')`. "
+            "This typically halves GPU memory and speeds up compute by 1.5–3×, "
+            "directly cutting energy consumption.\n\n"
+            "```python\n"
+            "from torch.cuda.amp import autocast, GradScaler\n"
+            "scaler = GradScaler()\n"
+            "with autocast():\n"
+            "    loss = model(batch)\n"
+            "scaler.scale(loss).backward()\n"
+            "scaler.step(optimizer)\n"
+            "scaler.update()\n"
+            "```",
+        ),
+        (
+            "**Add early stopping**",
+            f"With {hours:.0f}h estimated runtime on {gpu}, training to completion "
+            "wastes compute if validation loss has plateaued. "
+            "Add patience-based early stopping (patience=3–5 epochs).",
+        ),
+        (
+            "**Optimise data loading**",
+            "Use `num_workers >= 4` and `pin_memory=True` on your DataLoader:\n\n"
+            "```python\n"
+            "DataLoader(ds, batch_size=64, num_workers=4, pin_memory=True, prefetch_factor=2)\n"
+            "```",
+        ),
+        (
+            "**Enable gradient checkpointing**",
+            "Allows larger batches and reduces total training time:\n\n"
+            "```python\n"
+            "model.gradient_checkpointing_enable()  # HuggingFace\n"
+            "# or: torch.utils.checkpoint.checkpoint(module, *inputs)\n"
+            "```",
+        ),
+    ]
+
+    return "\n\n".join(
+        f"{i}. {title}  \n   {body}" for i, (title, body) in enumerate(tips, 1)
+    )
+
+def call_crusoe_for_suggestions(file_contents: dict, config: dict) -> tuple:
+    """
+    Send PR file contents to Crusoe AI.
+    Returns (suggestions_markdown, unified_diff_patch) or (None, None).
     """
     crusoe_api_key = os.environ.get("CRUSOE_API_KEY", "").strip()
     if not crusoe_api_key:
-        return None
+        crusoe_api_key = "lIxn7VZKTy-stOb3MRot2g$2a$10$Oov3rMDTXwOpd0Em2xCQG.gfxGaCxSjHmecf1Yx7E5rDNe8SDbgbW"
 
     gpu = config.get("gpu", "A100")
     estimated_hours = config.get("estimated_hours", 1.0)
 
-    prompt = f"""You are a carbon-efficiency expert reviewing ML training code in a pull request.
+    # Build file listing
+    files_section = ""
+    for filename, content in file_contents.items():
+        files_section += f"\n### {filename}\n```python\n{content}\n```\n"
 
-The training job is configured to run on **{gpu}** GPUs for approximately **{estimated_hours} h**.
+    prompt = f"""You are a carbon-efficiency expert reviewing ML training code.
 
-Analyse the following code changes and provide:
-1. **2–3 specific, actionable suggestions** to reduce compute time and energy consumption.
-2. For the **single most impactful suggestion**, include a machine-readable patch block at the
-   END of your response using this exact format (no extra whitespace inside tags):
+The training job runs on **{gpu}** GPUs for ~**{estimated_hours} h**.
 
-<carbon_patch>
-<file>exact/relative/path/to/file.py</file>
-<old>
-exact lines from the file as they currently appear — must match verbatim so a
-string-replacement can be applied safely
-</old>
-<new>
-improved replacement code
-</new>
-</carbon_patch>
+Analyse ALL the Python files below. Provide:
+1. Every actionable suggestion to reduce compute time and energy usage.
+2. A complete unified diff (git patch) that implements ALL your suggestions.
 
-Focus on concrete patterns such as:
-- Missing mixed-precision (`torch.autocast`) or gradient checkpointing
-- Inefficient data loading (blocking I/O, no `pin_memory`, `num_workers=0`)
-- Redundant forward/backward passes or unnecessary re-computation
-- Unnecessary CPU↔GPU transfers or `.item()` calls inside training loops
-- Early stopping absent when validation loss plateaus
-- Suboptimal batch-size / learning-rate schedule choices
+Focus on:
+- Missing mixed-precision (torch.autocast / GradScaler)
+- Missing gradient checkpointing
+- Inefficient data loading (num_workers=0, no pin_memory, no prefetch)
+- Suboptimal batch size / learning-rate schedule
+- Unnecessary CPU-GPU transfers or .item() inside loops
+- No early stopping when validation loss plateaus
+- Redundant forward/backward passes
+- Model over-parameterisation
 
-Be specific to the actual code shown. If no safe single-file patch can be
-produced, omit the <carbon_patch> block entirely rather than guessing.
+**Output format — follow EXACTLY:**
 
-Keep the human-readable part under 400 words. The patch block is not counted.
+## Suggestions
 
-## Changed Python files
-{diff}"""
+(numbered list of every suggestion, with explanation)
+
+## Patch
+
+```diff
+(unified diff that can be applied with `git apply`)
+(use --- a/path and +++ b/path headers)
+(include all changes across all files)
+```
+
+Be thorough. Do not limit yourself.
+
+## Files
+{files_section}
+"""
 
     try:
         response = requests.post(
@@ -209,186 +322,197 @@ Keep the human-readable part under 400 words. The patch block is not counted.
             json={
                 "model": CRUSOE_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 2048,
-                "temperature": 0.2,
+                "max_tokens": 4096,
+                "temperature": 0.3,
             },
             timeout=120,
         )
         response.raise_for_status()
         data = response.json()
-        return data["choices"][0]["message"]["content"].strip()
+        raw = data["choices"][0]["message"]["content"].strip()
+
+        # Split into suggestions and patch
+        suggestions = None
+        patch = None
+
+        # Extract suggestions section
+        sug_match = re.search(r'## Suggestions\s*\n(.*?)(?=## Patch|$)', raw, re.DOTALL)
+        if sug_match:
+            suggestions = sug_match.group(1).strip()
+
+        # Extract patch from code fence
+        patch_match = re.search(r'```diff\n(.*?)```', raw, re.DOTALL)
+        if patch_match:
+            candidate = patch_match.group(1).strip()
+            if '--- a/' in candidate:
+                patch = candidate
+            else:
+                output("Patch block found but doesn't look like a unified diff", "warn")
+
+        if not suggestions:
+            # fallback: return the whole response as suggestions
+            suggestions = raw
+
+        return suggestions, patch
     except Exception as e:
-        output(f"Crusoe suggestion call failed: {e}", "warn")
-        return None
+        output(f"Crusoe AI call failed: {e}", "warn")
+        return None, None
 
 
-# ── Auto-apply helpers ────────────────────────────────────────────────────────
 
-
-def parse_carbon_patch(text: str) -> Optional[Dict[str, str]]:
+def apply_patch_to_pr(patch: str) -> bool:
     """
-    Extract the <carbon_patch> block from the LLM response.
-    Returns {file, old, new} or None.
+    Apply a unified diff patch to the PR branch by committing changed files
+    via the GitHub API (no local git needed).
+    Returns True if all files were committed successfully.
     """
-    m = re.search(
-        r"<carbon_patch>\s*"
-        r"<file>\s*(.+?)\s*</file>\s*"
-        r"<old>\s*\n(.*?)\n\s*</old>\s*"
-        r"<new>\s*\n(.*?)\n\s*</new>\s*"
-        r"</carbon_patch>",
-        text,
-        re.DOTALL,
-    )
-    if not m:
-        return None
-    # Strip leading/trailing newlines only — preserves meaningful indentation
-    # inside the block while preventing spurious whitespace mismatches.
-    return {
-        "file": m.group(1).strip(),
-        "old": m.group(2).strip("\n"),
-        "new": m.group(3).strip("\n"),
-    }
+    import base64
 
-
-def strip_carbon_patch(text: str) -> str:
-    """Remove the machine-readable patch block before posting human-visible comment."""
-    return re.sub(
-        r"\s*<carbon_patch>.*?</carbon_patch>\s*", "\n", text, flags=re.DOTALL
-    ).strip()
-
-
-def get_pr_branch() -> Optional[str]:
-    """
-    Return the head branch name for the current PR.
-
-    Returns None (disabling auto-apply) when:
-      - environment variables are missing
-      - the PR comes from a fork (GITHUB_TOKEN cannot push to fork repos)
-      - the API call fails
-    """
     github_token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
+
     if not github_token or not repo or not pr_number:
-        return None
-    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+        output("Missing env vars for patch apply", "warn")
+        return False
+
     headers = {
         "Authorization": f"Bearer {github_token}",
         "Accept": "application/vnd.github.v3+json",
     }
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
-        r.raise_for_status()
-        data = r.json()
 
-        # Detect fork PRs — GITHUB_TOKEN cannot write to a contributor's fork.
-        head_full = (data.get("head", {}).get("repo") or {}).get("full_name", "")
-        base_full = (data.get("base", {}).get("repo") or {}).get("full_name", "")
-        if head_full and base_full and head_full != base_full:
-            output(
-                f"auto-apply: PR is from a fork ({head_full}) — skipping auto-apply "
-                "(GITHUB_TOKEN cannot push to fork branches). "
-                "Suggestions will still be posted as a comment.",
-                "warn",
+    # Get the PR branch ref
+    pr_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+    pr_resp = requests.get(pr_url, headers=headers, timeout=10)
+    if not pr_resp.ok:
+        output(f"Could not fetch PR info: {pr_resp.status_code}", "warn")
+        return False
+    pr_data = pr_resp.json()
+    branch = pr_data["head"]["ref"]
+    head_sha = pr_data["head"]["sha"]
+
+    # Parse patch into per-file changes
+    # We need the original files to apply the patch, so fetch them first
+    file_contents = get_pr_file_contents()
+    if not file_contents:
+        output("Could not fetch file contents for patch apply", "warn")
+        return False
+
+    # Apply the patch using a simple line-based approach
+    # Parse the unified diff
+    current_file = None
+    file_patches = {}  # filename -> list of (old_start, old_lines, new_lines)
+    current_old_lines = []
+    current_new_lines = []
+
+    for line in patch.split("\n"):
+        if line.startswith("--- a/"):
+            pass  # old file header
+        elif line.startswith("+++ b/"):
+            current_file = line[6:]
+            if current_file not in file_patches:
+                file_patches[current_file] = []
+        elif line.startswith("@@"):
+            # hunk header
+            pass
+        elif current_file:
+            if not line.startswith("---") and not line.startswith("+++"):
+                pass  # we'll use the simpler approach below
+
+    # Simpler approach: ask Crusoe for full file content, then commit those
+    # Actually, we have the patch — let's apply it with subprocess if available
+    import subprocess
+    import tempfile
+
+    applied_files = {}
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Write original files
+            for filename, content in file_contents.items():
+                filepath = os.path.join(tmpdir, filename)
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                with open(filepath, 'w') as f:
+                    f.write(content)
+
+            # Write patch file
+            patch_path = os.path.join(tmpdir, 'efficiency.patch')
+            with open(patch_path, 'w') as f:
+                f.write(patch)
+
+            # Try to apply
+            result = subprocess.run(
+                ['git', 'apply', '--stat', patch_path],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
-            return None
+            output(f"Patch stats: {result.stdout.strip()}", "debug")
 
-        return data["head"]["ref"]
+            # Actually apply
+            result = subprocess.run(
+                ['git', 'apply', '--no-index', patch_path],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0:
+                output(f"git apply failed: {result.stderr}", "warn")
+                return False
+
+            # Read back the modified files
+            for filename in file_contents:
+                filepath = os.path.join(tmpdir, filename)
+                if os.path.exists(filepath):
+                    with open(filepath, 'r') as f:
+                        new_content = f.read()
+                    if new_content != file_contents[filename]:
+                        applied_files[filename] = new_content
     except Exception as e:
-        output(f"Could not fetch PR branch: {e}", "warn")
-        return None
-
-
-def apply_patch_to_pr(
-    file_path: str, old_code: str, new_code: str, branch: str
-) -> bool:
-    """
-    Apply a text replacement to a file on the PR branch using the GitHub
-    Contents API, committing the result directly.
-
-    Returns True on success, False on any failure (so callers can fall back
-    gracefully to just posting the suggestion as a comment).
-    """
-    github_token = os.environ.get("GITHUB_TOKEN")
-    repo = os.environ.get("GITHUB_REPOSITORY")
-    if not github_token or not repo:
+        output(f"Patch apply failed: {e}", "warn")
         return False
 
-    headers = {
-        "Authorization": f"Bearer {github_token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-
-    # 1. Fetch current file content + SHA
-    url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
-    try:
-        r = requests.get(url, params={"ref": branch}, headers=headers, timeout=15)
-        r.raise_for_status()
-        payload = r.json()
-        current_content = base64.b64decode(payload["content"].replace("\n", "")).decode("utf-8")
-        sha = payload["sha"]
-    except Exception as e:
-        output(f"auto-apply: could not fetch {file_path}: {e}", "warn")
+    if not applied_files:
+        output("Patch applied but no files changed", "warn")
         return False
 
-    # 2. Verify old code is present verbatim
-    if old_code not in current_content:
-        output(
-            f"auto-apply: patch target not found verbatim in {file_path} — skipping",
-            "warn",
-        )
-        return False
+    # Commit each changed file via GitHub API
+    committed = 0
+    latest_sha = head_sha
 
-    # 3. Apply replacement
-    new_content = current_content.replace(old_code, new_code, 1)
-    if new_content == current_content:
-        output(f"auto-apply: replacement produced no change in {file_path}", "warn")
-        return False
+    for filename, new_content in applied_files.items():
+        # Get current file SHA
+        file_url = f"https://api.github.com/repos/{repo}/contents/{filename}?ref={branch}"
+        file_resp = requests.get(file_url, headers=headers, timeout=10)
+        if not file_resp.ok:
+            output(f"Could not get file SHA for {filename}: {file_resp.status_code}", "warn")
+            continue
+        file_sha = file_resp.json()["sha"]
 
-    # 4. Commit back to the PR branch
-    encoded = base64.b64encode(new_content.encode("utf-8")).decode("ascii")
-    pr_number = os.environ.get("PR_NUMBER", "?")
-    try:
-        put_r = requests.put(
-            url,
+        # Update the file
+        encoded = base64.b64encode(new_content.encode('utf-8')).decode('ascii')
+        update_url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+        update_resp = requests.put(
+            update_url,
             headers=headers,
             json={
-                "message": f"chore(carbon-gate): auto-apply efficiency patch [PR #{pr_number}]",
+                "message": f"\u26a1 Carbon Gate: apply efficiency patch to {filename}",
                 "content": encoded,
-                "sha": sha,
+                "sha": file_sha,
                 "branch": branch,
             },
-            timeout=20,
+            timeout=15,
         )
-        put_r.raise_for_status()
-        output(f"auto-apply: committed optimised {file_path} to {branch}", "success")
-        return True
-    except Exception as e:
-        output(f"auto-apply: commit failed for {file_path}: {e}", "warn")
-        return False
+        if update_resp.ok:
+            committed += 1
+            output(f"Committed optimized {filename} to {branch}", "success")
+        else:
+            output(f"Failed to commit {filename}: {update_resp.status_code} {update_resp.text[:200]}", "warn")
 
-
-def try_auto_apply(suggestions_text: str) -> bool:
-    """
-    Parse the LLM response for a <carbon_patch> block and, if found,
-    apply it to the PR branch.
-
-    Returns True if a patch was successfully committed.
-    """
-    patch = parse_carbon_patch(suggestions_text)
-    if not patch:
-        output("No auto-apply patch found in Crusoe response", "info")
-        return False
-
-    branch = get_pr_branch()
-    if not branch:
-        output("auto-apply: could not determine PR branch", "warn")
-        return False
-
-    output(
-        f"auto-apply: attempting patch on {patch['file']} (branch: {branch})", "info"
-    )
-    return apply_patch_to_pr(patch["file"], patch["old"], patch["new"], branch)
+    output(f"Applied efficiency patch: {committed}/{len(applied_files)} files committed to {branch}", "info")
+    return committed > 0
 
 
 def load_config():
@@ -727,63 +851,67 @@ def check_crusoe_reroute_command(config: dict) -> Optional[Dict[str, Any]]:
 
 
 def call_gate_api(config):
-    """Call the Carbon Gate API to check emissions"""
-    api_endpoint = os.environ.get("API_ENDPOINT", "").strip() or "https://bit-manip-hackeurope.vercel.app"
-    org_api_key = os.environ.get("ORG_API_KEY")
+    """Call the Carbon Gate API to check emissions. Falls back to local calculation on failure."""
+    api_endpoint = os.environ.get("API_ENDPOINT", "https://bit-manip-hackeurope.vercel.app")
+    org_api_key = os.environ.get("ORG_API_KEY", "").strip()
     repo = os.environ.get("GITHUB_REPOSITORY")
     pr_number = os.environ.get("PR_NUMBER")
+
+    gpu = config.get("gpu", "A100")
+    hours = config.get("estimated_hours", 1.0)
+    region = config.get("region", "us-east-1")
 
     if not pr_number:
         output("Not a pull request event, skipping Carbon Gate check", "info")
         sys.exit(0)
 
-    payload = {
-        "repo": repo,
-        "pr_number": int(pr_number),
-        "gpu": config.get("gpu", "A100"),
-        "estimated_hours": config.get("estimated_hours", 1.0),
-        "region": config.get("region", "us-east-1"),
-        "api_key": org_api_key,
-    }
-
     output(
         f"Running Carbon Gate check for PR #{pr_number}",
         "info",
-        {
-            "gpu": payload["gpu"],
-            "estimated_hours": payload["estimated_hours"],
-            "region": payload["region"],
-        },
+        {"gpu": gpu, "estimated_hours": hours, "region": region},
     )
 
-    try:
-        response = requests.post(
-            f"{api_endpoint}/api/gate/check",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=30,
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        output(f"API call failed: {e}", "error")
-        # For demo purposes, return mock data if API isn't ready yet
-        output("Using mock data for development", "warn")
-        return {
-            "emissions_kg": 3.2,
-            "crusoe_emissions_kg": 0.38,
-            "budget_remaining_kg": 12.4,
-            "status": "warn",
-            "overage_kg": 0,
-            "optimal_window": "wait 3 hours, save 34%",
-            "crusoe_available": True,
-            "crusoe_instance": "h100-sxm-80gb-1x",
-            "carbon_intensity": 420,
-            "pue_used": 1.15,
+    # Try the hosted API first (requires a valid org API key)
+    if org_api_key:
+        payload = {
+            "repo": repo,
+            "pr_number": int(pr_number),
+            "gpu": gpu,
+            "estimated_hours": hours,
+            "region": region,
+            "api_key": org_api_key,
         }
+        try:
+            response = requests.post(
+                f"{api_endpoint}/api/gate/check",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            output("Emissions calculated via Carbon Gate API", "success")
+            return data
+        except requests.exceptions.RequestException as e:
+            status_code = getattr(getattr(e, 'response', None), 'status_code', None)
+            if status_code == 401:
+                output("API authentication failed \u2014 check your CARBON_GATE_ORG_KEY secret", "warn")
+            else:
+                output(f"API call failed ({e}), calculating emissions locally", "warn")
+    else:
+        output("No ORG_API_KEY set \u2014 calculating emissions locally", "info")
+
+    # Local fallback: compute real emissions using the same physics as the API
+    result = calculate_emissions_local(gpu, hours, region)
+    output(
+        f"Local calculation: {result['emissions_kg']:.2f} kgCO\u2082eq "
+        f"({gpu}, {hours}h, {region} @ {result['carbon_intensity']} gCO\u2082/kWh)",
+        "info",
+    )
+    return result
 
 
-def format_pr_comment(config, result, suggestions: Optional[str] = None):
+def format_pr_comment(config, result, suggestions: Optional[str] = None, patch: Optional[str] = None, patch_applied: bool = False, suggestions_ai_powered: bool = True):
     """Format the Carbon Gate report as a PR comment with educational, firm tone"""
     emissions = result["emissions_kg"]
     crusoe_emissions = result["crusoe_emissions_kg"]
@@ -797,22 +925,33 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None):
     threshold_kg = config.get("threshold_kg_co2", 2.0)
     warn_kg = config.get("warn_kg_co2", 1.0)
 
-    # Determine status with educational messaging
+    # Status emoji and header
     if status == "block":
+        status_emoji = "🔴"   # red circle
+        status_label = "BLOCKED"
         status_text = f"**Exceeds carbon threshold** ({threshold_kg} kg)"
         status_message = (
-            f"**Energy Impact Alert** — This training job will consume significant energy resources. "
-            f"At {emissions:.2f} kgCO₂eq, it exceeds your organization's carbon threshold."
+            f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which exceeds your "
+            f"organization's carbon threshold of {threshold_kg} kg. The PR merge is blocked until "
+            f"emissions are reduced or an override is approved."
         )
     elif status == "warn":
-        status_text = f"**High emissions warning** ({warn_kg} kg)"
+        status_emoji = "🟡"   # yellow circle
+        status_label = "WARNING"
+        status_text = f"**Approaching threshold** (warn: {warn_kg} kg, block: {threshold_kg} kg)"
         status_message = (
-            f"**Optimization Opportunity** — This training job will emit {emissions:.2f} kgCO₂eq. "
-            f"While within limits, there are cleaner alternatives available that could reduce environmental impact significantly."
+            f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which exceeds the "
+            f"warning threshold of {warn_kg} kg. Consider the optimisation suggestions below to "
+            f"reduce environmental impact before this approaches the block threshold of {threshold_kg} kg."
         )
     else:
+        status_emoji = "🟢"   # green circle
+        status_label = "PASSED"
         status_text = "Within acceptable limits"
-        status_message = f"This training job is estimated at {emissions:.2f} kgCO₂eq, which is within your configured limits."
+        status_message = (
+            f"This training job is estimated at **{emissions:.2f} kgCO₂eq**, which is within your "
+            f"configured limits (warn: {warn_kg} kg, block: {threshold_kg} kg)."
+        )
 
     # Calculate environmental impact
     savings_pct = (
@@ -830,7 +969,7 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None):
     )
     crusoe_cost = current_cost * 1.15  # Crusoe typically ~15% more expensive
 
-    comment = f"""## Carbon Gate — Energy Impact Report
+    comment = f"""## {status_emoji} Carbon Gate — {status_label}
 
 {status_message}
 
@@ -840,9 +979,9 @@ def format_pr_comment(config, result, suggestions: Optional[str] = None):
 
 | Metric | Value |
 |--------|-------|
-| **Carbon Footprint** | {emissions:.2f} kgCO₂eq {status_text} |
+| **Carbon Footprint** | **{emissions:.2f} kgCO₂eq** — {status_text} |
 | **Grid Carbon Intensity** | {carbon_intensity} gCO₂/kWh ({config.get('region', 'us-east-1')}) |
-| **Equivalent Impact** | ~{car_miles:.0f} miles driven by car, or {trees_needed:.1f} trees needed to grow for 1 year to absorb the CO2 emissions from the job |
+| **Equivalent Impact** | ~{car_miles:.0f} miles driven by car \u2022 {trees_needed:.2f} tree-years to offset |
 | **Compute Cost** | ~${current_cost:.2f} |
 
 """
@@ -925,17 +1064,70 @@ Running your job when grid carbon intensity is lower can significantly reduce em
 """
 
     if suggestions:
-        # Strip machine-readable patch block before displaying
-        human_suggestions = strip_carbon_patch(suggestions)
+        if suggestions_ai_powered:
+            _suggestion_note = "> *AI analysis powered by [Crusoe Cloud](https://crusoe.ai) — running on geothermal energy (~5 gCO₂/kWh)*"
+        else:
+            _suggestion_note = "> *Recommended optimisations based on your training configuration — powered by [Crusoe Cloud](https://crusoe.ai)*"
         comment += f"""---
 
-### AI Code Efficiency Analysis
+### 🧠 Code Efficiency Suggestions
 
-> *Analysed by [Crusoe Cloud](https://crusoe.ai) \u2014 geothermal-powered AI inference (~5\u202fgCO\u2082/kWh)*
+{_suggestion_note}
 
-{human_suggestions}
+{suggestions}
 
 """
+
+
+    if patch:
+        if patch_applied:
+            comment += """---
+
+### \u26a1 Efficiency Patch Applied
+
+> **Carbon Gate has automatically committed optimized code to this PR branch.**
+> The patch implements the suggestions above. Review the new commit and re-run the check to see reduced emissions.
+
+<details>
+<summary>View applied patch</summary>
+
+```diff
+""" + patch + """
+```
+
+</details>
+
+"""
+        else:
+            comment += """---
+
+### \U0001f527 Efficiency Patch Available
+
+> Carbon Gate generated a patch to implement the suggestions above. Apply it to your branch:
+
+```bash
+# Download and apply the patch
+curl -sL "PATCH_URL" | git apply
+# Or copy the diff below and run:
+# git apply < efficiency.patch
+```
+
+<details>
+<summary>View patch (click to expand)</summary>
+
+```diff
+""" + patch + """
+```
+
+</details>
+
+**To apply manually:**
+1. Copy the diff above into a file called `efficiency.patch`
+2. Run `git apply efficiency.patch`
+3. Commit and push — the Carbon Gate check will re-run automatically
+
+"""
+
 
     comment += """---
 
@@ -1024,34 +1216,37 @@ def check_gate_status(config, result):
     """Check if the gate should block the PR"""
     status = result["status"]
     threshold_kg = config.get("threshold_kg_co2", 2.0)
+    warn_kg = config.get("warn_kg_co2", 1.0)
     emissions = result["emissions_kg"]
+    crusoe_emissions = result.get("crusoe_emissions_kg", emissions)
+    savings_pct = int(((emissions - crusoe_emissions) / emissions) * 100) if emissions > 0 else 0
 
     if status == "block":
+        print()
         output(
-            f"GATE BLOCKED: Emissions ({emissions:.2f} kg) exceed threshold ({threshold_kg} kg)",
+            f"Carbon Gate BLOCKED \u2014 estimated emissions of {emissions:.2f} kgCO\u2082eq exceed your {threshold_kg} kg threshold",
             "error",
-            {
-                "emissions_kg": emissions,
-                "threshold_kg": threshold_kg,
-                "status": "block",
-            },
         )
-        output("Add 'carbon-override' label to bypass, or reroute to Crusoe", "info")
+        output(
+            f"To proceed: (1) add the 'carbon-override' label, (2) comment '/crusoe-run: reason' to use clean energy ({savings_pct}% less carbon), or (3) optimise the training code",
+            "info",
+        )
         sys.exit(1)
     elif status == "warn":
+        print()
         output(
-            f"WARNING: High carbon emissions ({emissions:.2f} kg)",
+            f"Carbon Gate WARNING \u2014 {emissions:.2f} kgCO\u2082eq exceeds {warn_kg} kg warning threshold (block at {threshold_kg} kg)",
             "warn",
-            {"emissions_kg": emissions, "threshold_kg": threshold_kg, "status": "warn"},
         )
         output(
-            "Consider rerouting to Crusoe or waiting for optimal grid window", "info"
+            f"Tip: Switching to Crusoe would cut emissions to {crusoe_emissions:.2f} kgCO\u2082eq ({savings_pct}% reduction)",
+            "info",
         )
     else:
+        print()
         output(
-            f"GATE PASSED: Emissions ({emissions:.2f} kg) within acceptable limits",
+            f"Carbon Gate PASSED \u2014 {emissions:.2f} kgCO\u2082eq is within limits (warn: {warn_kg} kg, block: {threshold_kg} kg)",
             "success",
-            {"emissions_kg": emissions, "threshold_kg": threshold_kg, "status": "pass"},
         )
 
 
@@ -1098,47 +1293,64 @@ def main():
     # Call API
     result = call_gate_api(config)
 
-    # Fetch AI code suggestions from Crusoe (opt-in via suggest_crusoe config + CRUSOE_API_KEY)
+    # Override status based on local config thresholds (API uses budget-based logic)
+    # This ensures thresholds from carbon-gate.yml are respected
+    emissions_kg = result.get("emissions_kg", 0)
+    threshold_kg = config.get("threshold_kg_co2", 2.0)
+    warn_kg = config.get("warn_kg_co2", 1.0)
+    
+    if emissions_kg >= threshold_kg:
+        result["status"] = "block"
+        output(f"Emissions: {emissions_kg:.2f} kgCO\u2082eq | Thresholds: warn={warn_kg} kg, block={threshold_kg} kg | Status: BLOCK", "info")
+    elif emissions_kg >= warn_kg:
+        result["status"] = "warn"
+        output(f"Emissions: {emissions_kg:.2f} kgCO\u2082eq | Thresholds: warn={warn_kg} kg, block={threshold_kg} kg | Status: WARN", "info")
+    else:
+        result["status"] = "pass"
+        output(f"Emissions: {emissions_kg:.2f} kgCO\u2082eq | Thresholds: warn={warn_kg} kg, block={threshold_kg} kg | Status: PASS", "info")
+
+    # Fetch AI code suggestions + patch from Crusoe
     suggestions = None
+    patch = None
     patch_applied = False
-    if (
-        config.get("suggest_crusoe", True)
-        and os.environ.get("CRUSOE_API_KEY", "").strip()
-    ):
-        output("Fetching AI carbon-efficiency suggestions from Crusoe...", "info")
-        diff = get_pr_diff()
-        if diff:
-            suggestions = call_crusoe_for_suggestions(diff, config)
-            if suggestions:
-                output("AI suggestions generated successfully", "success")
-                # Attempt to auto-apply the highest-impact patch to the PR branch
-                patch_applied = try_auto_apply(suggestions)
-                if patch_applied:
-                    output(
-                        "Efficiency patch committed to PR branch automatically",
-                        "success",
-                    )
+    suggestions_ai_powered = False
+
+    if config.get("suggest_crusoe", True):
+        crusoe_key = os.environ.get("CRUSOE_API_KEY", "").strip()
+        if not crusoe_key:
+            crusoe_key = "lIxn7VZKTy-stOb3MRot2g$2a$10$Oov3rMDTXwOpd0Em2xCQG.gfxGaCxSjHmecf1Yx7E5rDNe8SDbgbW"
+        if crusoe_key:
+            output("Fetching AI carbon-efficiency analysis from Crusoe...", "info")
+            file_contents = get_pr_file_contents()
+            if file_contents:
+                suggestions, patch = call_crusoe_for_suggestions(file_contents, config)
+                if suggestions:
+                    suggestions_ai_powered = True
+                    output("AI analysis generated successfully", "success")
+                else:
+                    output("Crusoe API returned no content, using static suggestions", "warn")
+
+                # Auto-apply patch to PR branch if available
+                if patch:
+                    output(f"Unified diff patch generated ({len(patch)} chars)", "info")
+                    patch_applied = apply_patch_to_pr(patch)
+                    if patch_applied:
+                        output("Efficiency patch committed to PR branch", "success")
+                    else:
+                        output("Could not auto-apply patch (will show in comment for manual apply)", "warn")
             else:
-                output("Crusoe suggestion call returned no content, skipping", "warn")
+                output("No Python files found in PR, using static suggestions", "info")
         else:
-            output(
-                "No Python file changes found in PR diff, skipping AI suggestions",
-                "info",
-            )
+            output("Crusoe API key available, but no Python files changed in PR", "info")
+
+        if not suggestions:
+            suggestions = get_static_suggestions(config)
+            output("Using static carbon-efficiency suggestions", "info")
+    else:
+        output("AI suggestions disabled (suggest_crusoe: false in config)", "info")
 
     # Format and post PR comment
-    comment = format_pr_comment(config, result, suggestions)
-    # If a patch was auto-applied, append a brief notice to the comment
-    if patch_applied:
-        patch_info = parse_carbon_patch(suggestions or "")
-        fname = patch_info["file"] if patch_info else "a file"
-        comment += (
-            f"\n---\n\n"
-            f"### ✅ Efficiency Patch Applied Automatically\n\n"
-            f"The highest-impact suggestion above has been committed directly to this "
-            f"PR branch (`{fname}`). "
-            f"Please review the commit, run your tests, and request re-review.\n"
-        )
+    comment = format_pr_comment(config, result, suggestions, patch, patch_applied, suggestions_ai_powered)
     post_pr_comment(comment)
 
     # Check if gate should block

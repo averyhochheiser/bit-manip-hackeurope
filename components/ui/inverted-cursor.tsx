@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { motion, useSpring } from "framer-motion";
 
-export function CustomCursor({ size = "h-8 w-8" }: { size?: string }) {
+export function CustomCursor({ size = "h-14 w-14" }: { size?: string }) {
     const [mounted, setMounted] = useState(false);
 
     // Use springs for smooth following

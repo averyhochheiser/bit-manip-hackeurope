@@ -5,7 +5,7 @@ export default function SettingsPage() {
   return (
     <DashboardLayout
       title="Policy Settings"
-      subtitle="Configure carbon thresholds and manage subscription billing controls."
+      subtitle="Set carbon budgets per organisation, repository, and team. Changes apply on the next gate check."
     >
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         <div className="xl:col-span-8">

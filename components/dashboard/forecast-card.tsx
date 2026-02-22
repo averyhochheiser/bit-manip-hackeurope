@@ -23,8 +23,8 @@ export function ForecastCard() {
   );
 
   return (
-    <section className="relative flex h-full flex-col justify-between bg-canvas-raised p-6 lg:p-10">
-      <h3 className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-ink-muted lg:left-10 lg:top-10">
+    <section className="relative flex h-full flex-col justify-between bg-[#2A2F35] p-6 lg:p-10">
+      <h3 className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50 lg:left-10 lg:top-10">
         Carbon Intensity Forecast
       </h3>
       <div className="mt-16 flex items-end gap-[3px] h-32 lg:mt-auto">
@@ -39,7 +39,7 @@ export function ForecastCard() {
                     ? "bg-stoneware-green"
                     : isCurrent
                       ? "bg-stoneware-turquoise"
-                      : "bg-border"
+                      : "bg-[#FFF8F0]/15"
                   }`}
                 style={{ height: `${height}%` }}
               />
@@ -48,12 +48,12 @@ export function ForecastCard() {
         })}
       </div>
       <div className="mt-6 flex items-center justify-between">
-        <p className="text-xs font-light text-ink-muted">
+        <p className="text-xs font-light text-[#FFF8F0]/50">
           {hoursUntilOptimal === 0
             ? `Now is optimal — ${optimalVal} gCO₂/kWh`
             : `Optimal in ~${hoursUntilOptimal}h (${String(optimalHour).padStart(2, "0")}:00 UTC, ${optimalVal} gCO₂/kWh) · save ~${savingsPct}%`}
         </p>
-        <p className="font-mono text-[10px] text-ink-faint">
+        <p className="font-mono text-[10px] text-[#FFF8F0]/30">
           {String(nowHour).padStart(2, "0")}:00 UTC
         </p>
       </div>

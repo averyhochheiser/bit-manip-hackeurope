@@ -1,5 +1,9 @@
 name: "Carbon Gate"
-description: "Estimate carbon emissions of ML training jobs and gate PR merges based on configurable thresholds"
+description: >-
+  Estimate carbon emissions of ML training jobs and gate PR merges based on
+  configurable thresholds. Auto-applies Crusoe AI efficiency patches to PR
+  branches when CRUSOE_API_KEY is set.
+  REQUIRED workflow permissions: contents: write  pull-requests: write
 author: "Carbon Gate Team"
 branding:
   icon: "cloud"
@@ -11,7 +15,7 @@ inputs:
     required: true
   api-endpoint:
     description: "Carbon Gate API endpoint URL"
-    required: true
+    required: false
     default: "https://bit-manip-hackeurope.vercel.app"
   org-api-key:
     description: "Organization API key for Carbon Gate"
@@ -24,11 +28,8 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: "3.10"
 

@@ -13,6 +13,7 @@ const config: Config = {
           DEFAULT: "#FFF8F0", // Floral White
           raised: "#F7EFE4"
         },
+        charcoal: "#23282E",
         ink: {
           DEFAULT: "#002A32", // Jet Black
           muted: "#2F5157",

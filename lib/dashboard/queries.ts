@@ -5,7 +5,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { MOCK_DASHBOARD } from "./mock-data";
-import type { DashboardReadModel, GateEventDbRow, GateEventRow, KpiItem } from "./types";
+import type { DashboardReadModel, GateEventDbRow, GateEventRow, KpiItem, RepoReport } from "./types";
 
 export async function getDashboardReadModel(): Promise<DashboardReadModel> {
   try {
@@ -23,9 +23,9 @@ export async function getDashboardReadModel(): Promise<DashboardReadModel> {
       .limit(1)
       .maybeSingle();
 
-    const includedKg  = budget?.included_kg  ?? MOCK_DASHBOARD.budget.includedKg;
-    const warningPct  = budget?.warning_pct  ?? MOCK_DASHBOARD.budget.warningPct;
-    const usedKg      = usage?.used_kg       ?? MOCK_DASHBOARD.budget.usedKg;
+    const includedKg = budget?.included_kg ?? MOCK_DASHBOARD.budget.includedKg;
+    const warningPct = budget?.warning_pct ?? MOCK_DASHBOARD.budget.warningPct;
+    const usedKg = usage?.used_kg ?? MOCK_DASHBOARD.budget.usedKg;
 
     // Naive linear projection to end of 30-day period based on burn rate so far
     const dayOfMonth = new Date().getDate();
@@ -42,19 +42,19 @@ export async function getDashboardReadModel(): Promise<DashboardReadModel> {
 
     const gateEvents: GateEventRow[] = rawEvents
       ? (rawEvents as GateEventDbRow[]).map((r) => ({
-          id:        r.id,
-          prNumber:  r.pr_number,
-          repo:      r.repo,
-          branch:    "—",  // branch not stored in DB; populated by action in future
-          kgCO2e:    r.emissions_kg,
-          status:    r.status === "pass" ? "Passed" : "Rerouted to Crusoe",
-          emittedAt: r.created_at,
-        }))
+        id: r.id,
+        prNumber: r.pr_number,
+        repo: r.repo,
+        branch: "—",  // branch not stored in DB; populated by action in future
+        kgCO2e: r.emissions_kg,
+        status: r.status === "pass" ? "Passed" : "Rerouted to Crusoe",
+        emittedAt: r.created_at,
+      }))
       : MOCK_DASHBOARD.gateEvents;
 
     // ── Billing ─────────────────────────────────────────────────────────────
     const UNIT_PRICE = 2.0; // $2 / kgCO₂ overage
-    const overageKg  = Math.max(0, usedKg - includedKg);
+    const overageKg = Math.max(0, usedKg - includedKg);
     const estimatedCharge = overageKg * UNIT_PRICE;
 
     // ── KPIs ────────────────────────────────────────────────────────────────
@@ -68,36 +68,54 @@ export async function getDashboardReadModel(): Promise<DashboardReadModel> {
 
     const kpis: KpiItem[] = [
       {
-        label:         "Emissions this month",
-        value:         `${usedKg.toFixed(1)} kgCO₂eq`,
-        delta:         `${((usedKg / includedKg) * 100).toFixed(0)}% of budget`,
+        label: "Emissions this month",
+        value: `${usedKg.toFixed(1)} kgCO₂eq`,
+        delta: `${((usedKg / includedKg) * 100).toFixed(0)}% of budget`,
         deltaPositive: usedKg < includedKg * (warningPct / 100),
       },
       {
-        label:         "Gates triggered",
-        value:         String(gateEvents.length),
-        delta:         `${reroutedCount} rerouted to Crusoe`,
+        label: "Gates triggered",
+        value: String(gateEvents.length),
+        delta: `${reroutedCount} rerouted to Crusoe`,
         deltaPositive: false,
       },
       {
-        label:         "Crusoe potential save",
-        value:         `${totalCrusoeSavings.toFixed(1)} kgCO₂eq`,
-        delta:         "if all rerouted",
+        label: "Crusoe potential save",
+        value: `${totalCrusoeSavings.toFixed(1)} kgCO₂eq`,
+        delta: "if all rerouted",
         deltaPositive: true,
       },
       {
-        label:         "Overage cost",
-        value:         estimatedCharge > 0 ? `$${estimatedCharge.toFixed(2)}` : "$0.00",
-        delta:         estimatedCharge > 0 ? `${overageKg.toFixed(1)} kg over` : "within budget",
+        label: "Overage cost",
+        value: estimatedCharge > 0 ? `$${estimatedCharge.toFixed(2)}` : "$0.00",
+        delta: estimatedCharge > 0 ? `${overageKg.toFixed(1)} kg over` : "within budget",
         deltaPositive: estimatedCharge === 0,
       },
     ];
 
+    // ── Repo Reports Aggregation ───────────────────────────────────────────
+    const repoMap = new Map<string, { used: number; count: number }>();
+    gateEvents.forEach((ev) => {
+      const entry = repoMap.get(ev.repo) || { used: 0, count: 0 };
+      entry.used += ev.kgCO2e;
+      entry.count += 1;
+      repoMap.set(ev.repo, entry);
+    });
+
+    const repoReports: RepoReport[] = Array.from(repoMap.entries()).map(([name, stats]) => ({
+      repo: name,
+      usedKg: round1(stats.used),
+      budgetKg: 10.0,
+      topContributor: "PR Author",
+      totalGatesRun: stats.count,
+    }));
+
     return {
       kpis,
-      budget:  { usedKg, includedKg, projectedKg: round1(projectedKg), warningPct },
+      budget: { usedKg, includedKg, projectedKg: round1(projectedKg), warningPct },
       billing: { unitPrice: UNIT_PRICE, estimatedOverageKg: round2(overageKg), estimatedCharge: round2(estimatedCharge) },
       gateEvents,
+      repoReports,
     };
   } catch (err) {
     console.error("[dashboard] read model failed, using mock data:", err);
