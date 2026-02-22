@@ -26,7 +26,9 @@ export function InstallCarbonGate({ repo }: InstallButtonProps) {
 
       if (!res.ok) {
         setState("error");
-        setMessage(data.error ?? "Something went wrong");
+        const hint = data.hint ? ` ${data.hint}` : "";
+        const detail = data.details?.length ? ` (${data.details[0].slice(0, 120)})` : "";
+        setMessage((data.error ?? "Something went wrong") + hint + detail);
         return;
       }
 
