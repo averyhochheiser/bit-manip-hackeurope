@@ -16,51 +16,52 @@ type GateHistoryTableProps = {
 
 export function GateHistoryTable({ events }: GateHistoryTableProps) {
   return (
-    <div className="relative flex h-full flex-col bg-[#2A2F35] p-6 lg:p-10">
-      <div className="mb-12 flex items-center justify-between">
-        <h3 className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50 lg:left-10 lg:top-10">
+    <div className="panel flex h-full flex-col p-6 lg:p-8">
+      <div className="mb-6 flex items-center justify-between">
+        <h3 className="text-[10px] uppercase tracking-widest text-floral/40">
           Gate Check History
         </h3>
-        <span className="absolute right-6 top-6 lg:right-10 lg:top-10 border-[0.5px] border-[#FFF8F0]/10 bg-[#23282E] px-3 py-1.5 text-[10px] uppercase tracking-widest text-[#FFF8F0]/30">
+        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-[10px] uppercase tracking-widest text-floral/30">
           Last {events.length} checks
         </span>
       </div>
-      <div className="mt-6 flex-1 overflow-hidden border-[0.5px] border-[#FFF8F0]/10">
+      <div className="flex-1 overflow-hidden rounded-xl border border-white/[0.06]">
         <table className="w-full text-left text-sm font-light">
-          <thead className="bg-[#23282E] text-[10px] uppercase tracking-widest text-[#FFF8F0]/50">
+          <thead className="bg-white/[0.02] text-[10px] uppercase tracking-widest text-floral/40">
             <tr>
-              <th className="px-5 py-4 font-normal">PR</th>
-              <th className="px-5 py-4 font-normal">Repo</th>
-              <th className="px-5 py-4 font-normal">kgCO2e</th>
-              <th className="px-5 py-4 font-normal">Status</th>
-              <th className="px-5 py-4 font-normal">Time</th>
+              <th className="px-5 py-3 font-normal">PR</th>
+              <th className="px-5 py-3 font-normal">Repo</th>
+              <th className="px-5 py-3 font-normal">kgCO2e</th>
+              <th className="px-5 py-3 font-normal">Status</th>
+              <th className="px-5 py-3 font-normal">Time</th>
             </tr>
           </thead>
           <tbody>
             {events.map((event) => (
               <tr
                 key={event.id}
-                className="border-t border-[#FFF8F0]/10 text-[#FFF8F0]"
+                className="border-t border-white/[0.05] text-floral"
               >
-                <td className="px-5 py-4 font-mono">#{event.prNumber}</td>
-                <td className="px-5 py-4">
+                <td className="px-5 py-3 font-mono">#{event.prNumber}</td>
+                <td className="px-5 py-3">
                   <p>{event.repo}</p>
-                  <p className="text-xs text-[#FFF8F0]/50">{event.branch}</p>
+                  <p className="text-xs text-floral/40">{event.branch}</p>
                 </td>
-                <td className="px-5 py-4 font-mono">
+                <td className="px-5 py-3 font-mono">
                   {event.kgCO2e.toFixed(2)}
                 </td>
-                <td className="px-5 py-4">
+                <td className="px-5 py-3">
                   <span
-                    className={`px-2.5 py-1 text-[10px] uppercase tracking-widest ${event.status === "Passed"
-                      ? "border-[0.5px] border-stoneware-green/30 bg-stoneware-green/10 text-stoneware-green"
-                      : "border-[0.5px] border-stoneware-turquoise/30 bg-stoneware-turquoise/10 text-stoneware-turquoise"
-                      }`}
+                    className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-widest ${
+                      event.status === "Passed"
+                        ? "border border-sage/30 bg-sage/10 text-sage"
+                        : "border border-crusoe/30 bg-crusoe/10 text-crusoe"
+                    }`}
                   >
                     {event.status}
                   </span>
                 </td>
-                <td className="px-5 py-4 text-[#FFF8F0]/50">{event.emittedAt}</td>
+                <td className="px-5 py-3 text-floral/40">{event.emittedAt}</td>
               </tr>
             ))}
           </tbody>
