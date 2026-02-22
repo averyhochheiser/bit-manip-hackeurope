@@ -109,7 +109,9 @@ export async function getUserOwnedRepos(username: string): Promise<GitHubRepo[]>
       updatedAt: r.updated_at,
       isPrivate: r.private,
       htmlUrl: r.html_url,
-      relation: "owned" as const,
+      relation: (r.owner.login.toLowerCase() === username.toLowerCase()
+        ? "owned"
+        : "contributed") as "owned" | "contributed",
     }));
 }
 
