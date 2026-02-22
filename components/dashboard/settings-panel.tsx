@@ -61,11 +61,7 @@ export function SettingsPanel({
     setStatus("Saving...");
     const response = await fetch("/api/usage/ingest", {
       method: "POST",
-      body: JSON.stringify({
-        mode: "settings-preview",
-        budgetKg,
-        warningPct: warning
-      })
+      body: JSON.stringify({ mode: "settings-preview", budgetKg, warningPct: warning }),
     });
     setStatus(response.ok ? "Saved." : "Could not save yet.");
   }
@@ -98,15 +94,16 @@ export function SettingsPanel({
         </p>
       </div>
 
-      <div className="mt-8 mb-10 flex gap-2">
+      {/* Tab bar */}
+      <div className="mb-6 flex gap-1 rounded-xl border border-floral/10 bg-floral/[0.03] p-1">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`inline-flex items-center gap-2 border-[0.5px] px-4 py-2.5 text-[10px] uppercase tracking-widest transition-colors ${
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
               activeTab === tab.id
-                ? "border-[#FFF8F0]/10 bg-[#23282E] text-[#FFF8F0]"
-                : "border-transparent text-[#FFF8F0]/50 hover:text-[#FFF8F0]"
+                ? "bg-floral/10 text-floral shadow-insetGlow"
+                : "text-floral/50 hover:text-floral/75"
             }`}
           >
             {tab.icon}
@@ -313,31 +310,29 @@ export function SettingsPanel({
             <input
               type="number"
               value={budgetKg}
-              onChange={(event) => setBudgetKg(Number(event.target.value))}
-              className="mt-3 w-full rounded border-[0.5px] border-[#FFF8F0]/10 bg-[#23282E] px-4 py-3 font-mono text-sm font-light text-[#FFF8F0] outline-none transition-colors focus:border-stoneware-turquoise"
+              onChange={(e) => setBudgetKg(Number(e.target.value))}
+              className="mt-2 w-full rounded-lg border border-floral/15 bg-gate-bg/80 px-3 py-2 font-monoData text-floral outline-none ring-crusoe/50 focus:ring-2"
             />
             <span className="mt-1 block text-[11px] text-floral/40">
               Plan limit: {tier.includedKg} kgCO₂e/mo
               {tier.hardCapKg > 0 && ` · Hard cap: ${tier.hardCapKg} kg (EU Taxonomy DNSH)`}
             </span>
           </label>
-          <label className="block text-sm font-light text-[#FFF8F0]/60">
-            <span className="text-[10px] uppercase tracking-widest">
-              Warning threshold (%)
-            </span>
+          <label className="block text-sm text-floral/75">
+            Warning threshold (%)
             <input
               type="number"
               min={1}
               max={99}
               value={warning}
-              onChange={(event) => setWarning(Number(event.target.value))}
-              className="mt-3 w-full rounded border-[0.5px] border-[#FFF8F0]/10 bg-[#23282E] px-4 py-3 font-mono text-sm font-light text-[#FFF8F0] outline-none transition-colors focus:border-stoneware-turquoise"
+              onChange={(e) => setWarning(Number(e.target.value))}
+              className="mt-2 w-full rounded-lg border border-floral/15 bg-gate-bg/80 px-3 py-2 font-monoData text-floral outline-none ring-crusoe/50 focus:ring-2"
             />
           </label>
-          <div className="flex flex-wrap items-center gap-4 pt-2">
+          <div className="flex flex-wrap items-center gap-3 pt-2">
             <button
               type="submit"
-              className="rounded bg-[#FFF8F0] px-5 py-3 text-[10px] uppercase tracking-widest text-[#23282E] transition-opacity hover:opacity-80"
+              className="rounded-lg border border-floral/15 bg-floral/10 px-4 py-2 text-sm font-medium text-floral transition hover:bg-floral/20"
             >
               Save policy
             </button>
@@ -349,7 +344,7 @@ export function SettingsPanel({
 
       {/* ── Repositories tab ── */}
       {activeTab === "repos" && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs text-floral/50">Per-repo overrides apply on top of the org budget.</p>
           </div>
@@ -401,10 +396,10 @@ export function SettingsPanel({
 
       {/* ── Teams tab ── */}
       {activeTab === "teams" && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-light text-[#FFF8F0]/50">Assign budgets to teams. Members inherit the team policy.</p>
-            <button className="inline-flex items-center gap-2 rounded border-[0.5px] border-stoneware-green/30 bg-stoneware-green/10 px-4 py-2.5 text-[10px] uppercase tracking-widest text-stoneware-green transition-opacity hover:opacity-80">
+            <p className="text-xs text-floral/50">Assign budgets to teams. Members inherit the team policy.</p>
+            <button className="inline-flex items-center gap-1.5 rounded-lg border border-sage/35 bg-sage/10 px-3 py-1.5 text-xs font-medium text-sage transition hover:bg-sage/20">
               <Plus size={12} />
               Add team
             </button>

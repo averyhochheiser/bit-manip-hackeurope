@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 type CarbonBudgetProgressBarProps = {
   usedKg: number;
@@ -10,10 +11,10 @@ type CarbonBudgetProgressBarProps = {
 
 type ProgressState = "healthy" | "warning" | "reroute";
 
-const FILL_COLOR: Record<ProgressState, string> = {
-  healthy: "bg-stoneware-green",
-  warning: "bg-stoneware-turquoise",
-  reroute: "bg-stoneware-bordeaux"
+const FILL_CLASS: Record<ProgressState, string> = {
+  healthy: "from-sage to-sage/70",
+  warning: "from-sage via-crusoe/80 to-crusoe",
+  reroute: "from-crusoe to-crusoe/60"
 };
 
 export function CarbonBudgetProgressBar({
@@ -24,59 +25,74 @@ export function CarbonBudgetProgressBar({
   const safeBudget = budgetKg <= 0 ? 1 : budgetKg;
   const pct = (usedKg / safeBudget) * 100;
   const clampedPct = Math.max(0, Math.min(100, pct));
-  const state: ProgressState =
-    pct < 70 ? "healthy" : pct < 100 ? "warning" : "reroute";
+  const state: ProgressState = pct < 70 ? "healthy" : pct < 100 ? "warning" : "reroute";
   const overageKg = Math.max(0, usedKg - safeBudget);
 
   return (
-    <section className="relative flex h-full flex-col justify-between bg-[#2A2F35] p-6 lg:p-10">
-      <div className="flex items-start justify-between gap-6">
-        <div>
-          <p className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50 lg:left-10 lg:top-10">
-            Carbon Budget
-          </p>
-          <h3 className="mt-16 text-lg font-normal text-[#FFF8F0]">
-            Budget Utilization
-          </h3>
-        </div>
-        <p className="mt-16 font-mono text-lg font-light text-[#FFF8F0] lg:mt-0">
-          {pct.toFixed(1)}%
-        </p>
-      </div>
+    <section className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-8 backdrop-blur-md">
+      <div className="pointer-events-none absolute inset-0 bg-noise opacity-[0.15]" />
 
-      <div className="mt-8">
-        <div className="h-1.5 overflow-hidden rounded-full bg-[#FFF8F0]/10">
-          <motion.div
-            className={`h-full rounded-full ${FILL_COLOR[state]}`}
-            initial={{ width: 0 }}
-            animate={{ width: `${clampedPct}%` }}
-            transition={{ type: "spring", stiffness: 120, damping: 22 }}
-          />
+      <div className="relative">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-floral/30">Monthly Policy</p>
+            <h3 className="mt-1 text-2xl font-bold text-floral">Carbon Budget</h3>
+          </div>
+          <div className="text-right">
+            <span className="font-monoData text-3xl font-bold text-floral">{pct.toFixed(0)}</span>
+            <span className="ml-1 text-xs font-bold text-floral/30 uppercase tracking-tighter">%</span>
+          </div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-sm font-light text-[#FFF8F0]/60">
-          <p className="font-mono">
-            {usedKg.toFixed(2)}kg / {safeBudget.toFixed(2)}kg
-          </p>
-          {overageKg > 0 ? (
-            <span className="border-[0.5px] border-stoneware-bordeaux/30 bg-stoneware-bordeaux/10 px-3 py-1.5 text-[10px] uppercase tracking-widest text-stoneware-bordeaux">
-              Reroute active · +{overageKg.toFixed(2)}kg
-            </span>
-          ) : (
-            <span className="border-[0.5px] border-[#FFF8F0]/10 px-3 py-1.5 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50 bg-[#23282E]">
-              On policy budget
-            </span>
-          )}
-        </div>
-      </div>
 
-      {projectedKg ? (
-        <p className="mt-6 text-xs font-light text-[#FFF8F0]/50">
-          Projected period close:{" "}
-          <span className="font-mono text-stoneware-turquoise">
-            {projectedKg.toFixed(2)}kg
-          </span>
-        </p>
-      ) : null}
+        <div className="mt-8">
+          <div className="relative h-4 overflow-hidden rounded-full bg-white/[0.05] shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)]">
+            <motion.div
+              className={cn(
+                "relative h-full rounded-full bg-gradient-to-r",
+                FILL_CLASS[state]
+              )}
+              initial={{ width: 0 }}
+              animate={{ width: `${clampedPct}%` }}
+              transition={{ type: "spring", stiffness: 100, damping: 20 }}
+            >
+              {/* Internal glow for the progress head */}
+              <div className="absolute right-0 top-0 h-full w-4 bg-white/20 blur-sm" />
+            </motion.div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 font-monoData text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-floral/40">Used:</span>
+              <span className="font-bold text-floral">{usedKg.toFixed(1)} kg</span>
+              <span className="text-floral/10">|</span>
+              <span className="text-floral/40">Limit:</span>
+              <span className="font-bold text-floral">{safeBudget.toFixed(0)} kg</span>
+            </div>
+
+            {overageKg > 0 ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-crusoe/30 bg-crusoe/10 px-3 py-1 font-bold text-crusoe uppercase tracking-wider text-[10px]">
+                <span className="h-1 w-1 rounded-full bg-crusoe animate-pulse" />
+                Reroute active: +{overageKg.toFixed(1)}kg Overage
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full border border-sage/20 bg-sage/10 px-3 py-1 font-bold text-sage uppercase tracking-wider text-[10px]">
+                On Policy
+              </span>
+            )}
+          </div>
+        </div>
+
+        {projectedKg ? (
+          <div className="mt-6 flex items-center gap-2 border-t border-white/[0.03] pt-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-floral/30">
+              Projected Burn Rate:
+            </p>
+            <span className="font-monoData text-xs font-bold text-crusoe">
+              {projectedKg.toFixed(1)} kgCO₂e at month end
+            </span>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

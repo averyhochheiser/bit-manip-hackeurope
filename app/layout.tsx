@@ -1,17 +1,20 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, Playfair_Display, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-sans",
-  weight: ["300", "400"]
+  variable: "--font-display"
+});
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-serif"
 });
 
 const jetbrains = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
-  weight: ["300", "400"]
+  variable: "--font-mono"
 });
 
 export const metadata: Metadata = {
@@ -25,10 +28,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrains.variable}`}>
-      <body className="font-sans font-light antialiased bg-[#23282E] text-[#FFF8F0]">
-        {children}
-      </body>
-      </html>
-      );
+    <html
+      lang="en"
+      className={`${inter.variable} ${playfair.variable} ${jetbrains.variable}`}
+    >
+      <body className="bg-gate-bg font-display antialiased overflow-x-hidden">{children}</body>
+    </html>
+  );
 }
