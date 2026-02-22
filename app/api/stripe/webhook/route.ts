@@ -2,6 +2,11 @@ import Stripe from "stripe";
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { updateOverrideStatus, incrementRepoUsage } from "@/lib/override/queries";
+import { markOverridePaid } from "@/lib/overrides";
+
+/** Days until a SHA-based override expires. */
+const OVERRIDE_TTL_DAYS = Number(process.env.OVERRIDE_TTL_DAYS ?? 7);
 
 /** Map Stripe price IDs to our tier IDs */
 function resolveTierFromSubscription(sub: Stripe.Subscription): string {
@@ -146,6 +151,49 @@ export async function POST(request: Request) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
+
+      // ── SHA-based override (new pay-to-override flow) ─────────────────────
+      // Idempotent: markOverridePaid uses upsert on stripe_session_id.
+      if (
+        session.metadata?.override_type === "sha" &&
+        session.mode === "payment"
+      ) {
+        const { owner, repo, sha, check, pr } = session.metadata;
+        if (owner && repo && sha && check) {
+          const expiresAt = new Date(
+            Date.now() + OVERRIDE_TTL_DAYS * 24 * 60 * 60 * 1000
+          ).toISOString();
+          await markOverridePaid(session.id, {
+            owner,
+            repo,
+            sha,
+            check_name: check,
+            pr: pr || null,
+            paid_at: new Date().toISOString(),
+            purchaser_email: session.customer_details?.email ?? null,
+            amount_total: session.amount_total ?? null,
+            currency: session.currency ?? null,
+            expires_at: expiresAt,
+          });
+        }
+        break;
+      }
+
+      // ── PR-based override (existing flow) ─────────────────────────────────
+      if (session.metadata?.override_id && session.mode === "payment") {
+        const overrideId = session.metadata.override_id;
+        const orgId = session.metadata.org_id;
+        const repo = session.metadata.repo;
+        const emissionsKg = parseFloat(session.metadata.emissions_kg || "0");
+
+        await updateOverrideStatus(overrideId, "approved");
+        if (orgId && repo && emissionsKg > 0) {
+          await incrementRepoUsage(orgId, repo, emissionsKg);
+        }
+        break;
+      }
+
+      // ── Subscription checkout ─────────────────────────────────────────────
       if (session.subscription) {
         const sub = await stripe.subscriptions.retrieve(session.subscription as string);
         await handleSubscriptionCreated(sub);
