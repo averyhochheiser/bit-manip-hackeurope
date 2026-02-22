@@ -208,27 +208,26 @@ export async function POST(req: Request) {
 
   const orgApiKey = keyRow?.api_key ?? "";
 
-  // 5. Commit both files
-  const results = await Promise.all([
-    putFile(
-      ghToken,
-      repo,
-      ".github/workflows/carbon-gate.yml",
-      WORKFLOW_YAML,
-      "ci: add Carbon Gate workflow\n\nAutomatic carbon emissions checking on every PR.",
-      branch,
-    ),
-    putFile(
-      ghToken,
-      repo,
-      "carbon-gate.yml",
-      CONFIG_YAML,
-      "chore: add Carbon Gate configuration\n\nDefault thresholds: 2.0 kgCO₂e block, 1.0 kgCO₂e warn.",
-      branch,
-    ),
-  ]);
+  // 5. Commit both files sequentially (parallel commits conflict on the same branch HEAD)
+  const workflowResult = await putFile(
+    ghToken,
+    repo,
+    ".github/workflows/carbon-gate.yml",
+    WORKFLOW_YAML,
+    "ci: add Carbon Gate workflow\n\nAutomatic carbon emissions checking on every PR.",
+    branch,
+  );
 
-  const [workflowResult, configResult] = results;
+  const configResult = await putFile(
+    ghToken,
+    repo,
+    "carbon-gate.yml",
+    CONFIG_YAML,
+    "chore: add Carbon Gate configuration\n\nDefault thresholds: 2.0 kgCO₂e block, 1.0 kgCO₂e warn.",
+    branch,
+  );
+
+  const results = [workflowResult, configResult];
 
   if (!workflowResult.ok || !configResult.ok) {
     const errors = results.filter((r) => !r.ok).map((r) => r.error);
