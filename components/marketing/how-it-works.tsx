@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { TextScramble } from "@/components/ui/text-scramble";
 import {
   GitPullRequest,
   BarChart3,
@@ -15,6 +16,8 @@ const steps = [
     title: "Open a Pull Request",
     description:
       "Push ML training code changes to any connected repository. The Carbon Gate action triggers automatically.",
+    accent: "text-stoneware-turquoise",
+    border: "border-stoneware-turquoise/20",
   },
   {
     icon: BarChart3,
@@ -22,6 +25,8 @@ const steps = [
     title: "Calculate Emissions",
     description:
       "Real-time grid data, dynamic PUE modeling, and GPU thermal profiling produce physics-grade CO₂ estimates.",
+    accent: "text-stoneware-green",
+    border: "border-stoneware-green/20",
   },
   {
     icon: AlertTriangle,
@@ -29,6 +34,8 @@ const steps = [
     title: "Enforce & Report",
     description:
       "A detailed PR comment shows emissions, Crusoe alternatives, and budget impact. High-emission PRs are blocked.",
+    accent: "text-stoneware-pink",
+    border: "border-stoneware-pink/20",
   },
   {
     icon: Leaf,
@@ -36,6 +43,8 @@ const steps = [
     title: "AI Auto-Patch",
     description:
       "Crusoe's LLM analyses your code and auto-commits efficiency patches — reducing emissions before training begins.",
+    accent: "text-stoneware-bordeaux",
+    border: "border-stoneware-bordeaux/20",
   },
 ];
 
@@ -70,7 +79,13 @@ export function HowItWorks() {
             How it works
           </p>
           <h2 className="mt-4 text-3xl font-normal tracking-tight text-[#FFF8F0] sm:text-4xl lg:text-5xl">
-            From push to patch in 60 seconds
+            <TextScramble
+              initial="Δt → 0 · CI/CD ∘ gate"
+              target="From push to patch in 60 seconds"
+              holdMs={600}
+              scrambleMs={1400}
+              startDelay={200}
+            />
           </h2>
           <p className="mt-4 max-w-xl text-sm font-light text-[#FFF8F0]/60">
             Carbon Gate integrates directly into your GitHub workflow — no infrastructure changes, no CLI tools, no additional CI jobs.
@@ -86,12 +101,12 @@ export function HowItWorks() {
         >
           {steps.map((step) => (
             <motion.div key={step.number} variants={stepItem}>
-              <div className="flex h-full flex-col bg-[#23282E] p-6 lg:p-8">
-                <span className="font-mono text-[10px] tracking-widest text-[#FFF8F0]/30">
+              <div className={`flex h-full flex-col bg-[#2A2F35] border-t-[1.5px] ${step.border} p-6 lg:p-8`}>
+                <span className={`font-mono text-[10px] tracking-widest ${step.accent}`}>
                   {step.number}
                 </span>
 
-                <div className="mt-6 text-[#FFF8F0]/50">
+                <div className={`mt-6 ${step.accent}`}>
                   <step.icon size={24} strokeWidth={1} />
                 </div>
 

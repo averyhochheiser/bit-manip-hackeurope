@@ -6,6 +6,7 @@ import { GateHistoryTable } from "@/components/dashboard/gate-history-table";
 import { KpiStrip } from "@/components/dashboard/kpi-strip";
 import { RepoBreakdown } from "@/components/dashboard/repo-breakdown";
 import { ScrollFloat } from "@/components/marketing/scroll-float";
+import { TextScramble } from "@/components/ui/text-scramble";
 import type { DashboardReadModel } from "@/lib/dashboard/types";
 
 const physicsMetrics = [
@@ -14,21 +15,21 @@ const physicsMetrics = [
     value: "1.11",
     equation: "1 + Q / P",
     hint: "Runtime thermodynamic profile",
-    accent: false
+    color: "text-stoneware-turquoise"
   },
   {
     label: "Radiative Forcing",
     value: "0.74x",
     equation: "α · ln(C/C₀)",
     hint: "Relative atmospheric impact index",
-    accent: false
+    color: "text-stoneware-pink"
   },
   {
     label: "Embodied Carbon",
     value: "150kg",
     equation: "H100 GPU",
     hint: "Manufacturing footprint before first line of code",
-    accent: true
+    color: "text-stoneware-bordeaux"
   }
 ];
 
@@ -39,18 +40,24 @@ type DashboardPreviewProps = {
 export function DashboardPreview({ data }: DashboardPreviewProps) {
   return (
     <section className="relative py-16 sm:py-20">
-      <div className="mb-8">
+      <div className="mb-12">
         <div className="flex items-center gap-3">
-          <p className="text-xs uppercase tracking-[0.2em] text-floral/55">Live dashboard preview</p>
+          <p className="text-[10px] uppercase tracking-widest text-[#FFF8F0]/50">Live dashboard preview</p>
           {data.gateEvents.length > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-sage/20 bg-sage/10 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-sage">
-              <span className="h-1 w-1 animate-pulse rounded-full bg-sage" />
+            <span className="inline-flex items-center gap-1.5 border-[0.5px] border-stoneware-green/30 px-2.5 py-1 text-[9px] uppercase tracking-widest text-stoneware-green">
+              <span className="h-1 w-1 animate-pulse rounded-full bg-stoneware-green" />
               Live data
             </span>
           )}
         </div>
-        <h2 className="mt-3 font-display text-3xl font-bold text-floral sm:text-4xl">
-          Every repo. Every team. One carbon ledger.
+        <h2 className="mt-4 text-3xl font-normal tracking-tight text-[#FFF8F0] sm:text-4xl">
+          <TextScramble
+            initial="∀ repo ∈ org · Σ CO₂"
+            target="Every repo. Every team. One carbon ledger."
+            holdMs={600}
+            scrambleMs={1400}
+            startDelay={200}
+          />
         </h2>
       </div>
 
@@ -78,29 +85,25 @@ export function DashboardPreview({ data }: DashboardPreviewProps) {
         )}
 
         <ScrollFloat className="xl:col-span-6" delay={0.15}>
-          <div className="panel p-5">
-            <h3 className="text-base font-semibold text-floral">Physics Stats</h3>
-            <div className="mt-4 space-y-3">
-              {physicsMetrics.map((metric) => (
-                <div
-                  key={metric.label}
-                  className={
-                    metric.accent
-                      ? "rounded-xl border border-mauve/30 bg-mauve/10 p-3 shadow-insetGlow"
-                      : "panel-muted p-3"
-                  }
-                >
-                  <div className="flex items-baseline justify-between">
-                    <p className="text-xs uppercase tracking-[0.14em] text-floral/55">{metric.label}</p>
-                    <p className="font-monoData text-[11px] text-floral/35">{metric.equation}</p>
-                  </div>
-                  <p className={`mt-1 font-monoData text-xl font-semibold ${metric.accent ? "text-mauve" : "text-floral"}`}>
+          <div className="grid grid-cols-1 gap-[0.5px] bg-floral/10">
+            {physicsMetrics.map((metric) => (
+              <div
+                key={metric.label}
+                className="relative flex flex-col justify-end bg-[#2A2F35] p-6"
+                style={{ minHeight: "130px" }}
+              >
+                <p className="absolute left-6 top-6 text-[10px] uppercase tracking-widest text-[#FFF8F0]/50">
+                  {metric.label}
+                </p>
+                <div className="flex items-baseline justify-between">
+                  <p className={`font-mono text-2xl font-light ${metric.color}`}>
                     {metric.value}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-floral/40">{metric.hint}</p>
+                  <p className="font-mono text-[10px] text-[#FFF8F0]/30">{metric.equation}</p>
                 </div>
-              ))}
-            </div>
+                <p className="mt-1 text-[11px] text-[#FFF8F0]/40">{metric.hint}</p>
+              </div>
+            ))}
           </div>
         </ScrollFloat>
 
