@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
+  console.log("origin: ", origin);
   const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -13,6 +14,7 @@ export async function GET(request: Request) {
     },
   });
 
+  console.log("OAuth sign-in initiated:", { data, error });
   if (error || !data.url) {
     return NextResponse.redirect(new URL("/?error=oauth_failed", request.url));
   }
