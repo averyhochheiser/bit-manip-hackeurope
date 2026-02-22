@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
-import { GitBranch, Users, Building2, Plus, Trash2, Shield, Zap, Globe, ChevronRight, Key, Copy, Loader2, Save } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { GitBranch, Building2, Trash2, Key, Copy, Plus, Loader2, Save } from "lucide-react";
 
-// ΓöÇΓöÇ Types ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type TierInfo = {
   id: string;
@@ -24,8 +24,6 @@ type SettingsPanelProps = {
   warningPct: number;
   repos?: string[];
   currentTier?: TierInfo;
-  tiers?: TierInfo[];
-  usedKg?: number;
   orgApiKey?: string;
 };
 
@@ -39,14 +37,6 @@ type RepoPolicy = {
   _dirty?: boolean;
 };
 
-// ── Tier card colours ────────────────────────────────────────────────────────
-
-const TIER_STYLES: Record<string, { border: string; bg: string; accent: string; badge: string }> = {
-  free:       { border: "border-floral/15", bg: "bg-floral/[0.03]", accent: "text-floral/60", badge: "bg-floral/10 text-floral/60" },
-  pro:        { border: "border-sage/30",   bg: "bg-sage/[0.04]",   accent: "text-sage",      badge: "bg-sage/15 text-sage" },
-  enterprise: { border: "border-crusoe/30", bg: "bg-crusoe/[0.04]", accent: "text-crusoe",    badge: "bg-crusoe/15 text-crusoe" },
-};
-
 const EU_HARD_CAP_KG = 20;
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -56,14 +46,12 @@ export function SettingsPanel({
   warningPct: initialWarning,
   repos = [],
   currentTier,
-  tiers = [],
-  usedKg = 0,
   orgApiKey,
 }: SettingsPanelProps) {
   const [budgetKg, setBudgetKg] = useState(defaultBudgetKg);
   const [warning, setWarning] = useState(initialWarning);
   const [status, setStatus] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"billing" | "org" | "repos" | "teams">("billing");
+  const [activeTab, setActiveTab] = useState<"org" | "repos">("org");
   const [keyCopied, setKeyCopied] = useState(false);
 
   const tier = currentTier ?? { id: "free", name: "Starter", includedKg: 50, hardCapKg: 75, basePriceCents: 0, overagePerKgCents: 0, warningPct: 80, overBudgetAction: "block" as const, csrdReporting: false, sbtiReduction: false, regulatoryNote: "" };
@@ -81,7 +69,7 @@ export function SettingsPanel({
     setRepoStatus(null);
     try {
       const res = await fetch("/api/repo/policy", {
-        headers: { "x-api-key": "demo" }, // TODO: use real org key from session
+        headers: { "x-api-key": "demo" },
       });
       if (res.ok) {
         const data = await res.json();
@@ -163,7 +151,7 @@ export function SettingsPanel({
     }
   }
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: { preventDefault(): void }) {
     event.preventDefault();
     setStatus("Saving...");
     const response = await fetch("/api/usage/ingest", {
@@ -177,23 +165,9 @@ export function SettingsPanel({
     setStatus(response.ok ? "Saved." : "Could not save yet.");
   }
 
-  async function openBillingPortal() {
-    const response = await fetch("/api/stripe/portal", { method: "POST" });
-    const payload = (await response.json()) as { url?: string };
-    if (payload.url) window.location.href = payload.url;
-  }
-
-  async function startSubscription() {
-    const response = await fetch("/api/stripe/checkout", { method: "POST" });
-    const payload = (await response.json()) as { url?: string };
-    if (payload.url) window.location.href = payload.url;
-  }
-
   const tabs = [
-    { id: "billing" as const, label: "Billing & Tiers", icon: <Shield size={14} /> },
     { id: "org" as const, label: "Organisation", icon: <Building2 size={14} /> },
     { id: "repos" as const, label: "Repositories", icon: <GitBranch size={14} /> },
-    { id: "teams" as const, label: "Teams", icon: <Users size={14} /> },
   ];
 
   return (
@@ -222,169 +196,7 @@ export function SettingsPanel({
         ))}
       </div>
 
-      {/* ΓöÇΓöÇ Billing & Tiers tab ΓöÇΓöÇ */}
-      {activeTab === "billing" && (
-        <div className="space-y-6">
-          {/* Current plan banner */}
-          <div className={`rounded-2xl border ${TIER_STYLES[tier.id]?.border ?? "border-floral/15"} ${TIER_STYLES[tier.id]?.bg ?? "bg-floral/[0.03]"} p-6`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-floral/30">Current plan</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${TIER_STYLES[tier.id]?.badge ?? ""}`}>
-                    {tier.name}
-                  </span>
-                </div>
-                <p className="mt-2 font-display text-2xl font-semibold text-floral">
-                  {tier.basePriceCents === 0 ? "Free" : `$${(tier.basePriceCents / 100).toFixed(0)}`}
-                  <span className="text-sm font-normal text-floral/40">{tier.basePriceCents > 0 ? "/mo" : ""}</span>
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-monoData text-lg font-bold text-floral">
-                  {usedKg.toFixed(1)}<span className="text-xs text-floral/40">/{tier.includedKg} kgCOΓéée</span>
-                </p>
-                <div className="mt-2 h-1.5 w-32 overflow-hidden rounded-full bg-white/[0.05]">
-                  <div
-                    className={`h-full rounded-full transition-all ${usedKg > tier.includedKg ? "bg-crusoe" : "bg-sage"}`}
-                    style={{ width: `${Math.min(100, (usedKg / tier.includedKg) * 100)}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {tier.regulatoryNote && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg border border-floral/[0.06] bg-floral/[0.02] px-3 py-2">
-                <Globe size={12} className="mt-0.5 shrink-0 text-floral/30" />
-                <p className="text-[11px] leading-relaxed text-floral/45">{tier.regulatoryNote}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Tier comparison */}
-          <div>
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-floral/30">Compare plans</p>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              {tiers.map((t) => {
-                const style = TIER_STYLES[t.id] ?? TIER_STYLES.free;
-                const isCurrent = t.id === tier.id;
-
-                return (
-                  <div
-                    key={t.id}
-                    className={`relative overflow-hidden rounded-2xl border p-5 transition ${
-                      isCurrent ? `${style.border} ${style.bg}` : "border-floral/[0.08] bg-white/[0.01] hover:bg-white/[0.03]"
-                    }`}
-                  >
-                    {isCurrent && (
-                      <div className="absolute right-3 top-3">
-                        <span className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${style.badge}`}>
-                          Current
-                        </span>
-                      </div>
-                    )}
-
-                    <p className={`text-xs font-bold ${style.accent}`}>{t.name}</p>
-                    <p className="mt-1 font-display text-xl font-semibold text-floral">
-                      {t.basePriceCents === 0 ? "Free" : `$${(t.basePriceCents / 100).toFixed(0)}`}
-                      <span className="text-xs font-normal text-floral/40">{t.basePriceCents > 0 ? "/mo" : ""}</span>
-                    </p>
-
-                    <div className="mt-4 space-y-2 text-[11px] text-floral/55">
-                      <div className="flex items-center gap-2">
-                        <Zap size={10} className={style.accent} />
-                        <span><strong className="text-floral/80">{t.includedKg}</strong> kgCOΓéée/mo included</span>
-                      </div>
-                      {t.hardCapKg > 0 && (
-                        <div className="flex items-center gap-2">
-                          <Shield size={10} className="text-crusoe/60" />
-                          <span>Hard cap at {t.hardCapKg} kg (DNSH)</span>
-                        </div>
-                      )}
-                      {t.overagePerKgCents > 0 && (
-                        <div className="flex items-center gap-2">
-                          <Globe size={10} className={style.accent} />
-                          <span>Overage: ${(t.overagePerKgCents / 100).toFixed(3)}/kg (EU ETS rate)</span>
-                        </div>
-                      )}
-                      {t.csrdReporting && (
-                        <div className="flex items-center gap-2">
-                          <Globe size={10} className="text-sage/60" />
-                          <span>CSRD-ready reporting</span>
-                        </div>
-                      )}
-                      {t.sbtiReduction && (
-                        <div className="flex items-center gap-2">
-                          <Shield size={10} className="text-sage/60" />
-                          <span>SBTi 1.5┬░C pathway (ΓêÆ4.2%/yr)</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <Shield size={10} className="text-floral/30" />
-                        <span>Over-budget: {t.overBudgetAction === "block" ? "hard block" : "warn only"}</span>
-                      </div>
-                    </div>
-
-                    {!isCurrent && (
-                      <button
-                        onClick={t.basePriceCents > 0 ? startSubscription : undefined}
-                        className={`mt-4 flex w-full items-center justify-center gap-1 rounded-lg border py-2 text-xs font-medium transition ${
-                          t.basePriceCents > 0
-                            ? `${style.border} ${style.bg} ${style.accent} hover:bg-white/[0.08]`
-                            : "border-floral/10 text-floral/40"
-                        }`}
-                      >
-                        {t.basePriceCents > 0 ? "Upgrade" : "Current baseline"}
-                        {t.basePriceCents > 0 && <ChevronRight size={12} />}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* EU Regulatory info */}
-          <div className="rounded-2xl border border-floral/[0.08] bg-floral/[0.02] p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Globe size={14} className="text-sage/60" />
-              <p className="text-xs font-bold uppercase tracking-[0.15em] text-floral/40">EU Regulatory Alignment</p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 text-[11px] leading-relaxed text-floral/50">
-              <div className="space-y-1">
-                <p className="font-semibold text-floral/70">EU ETS Phase IV</p>
-                <p>Overage pricing mirrors the EU carbon market (~Γé¼85/tCOΓéé). Your internal carbon cost matches the real economic cost of emissions.</p>
-              </div>
-              <div className="space-y-1">
-                <p className="font-semibold text-floral/70">EU Taxonomy (DNSH)</p>
-                <p>Free tier hard cap at 75 kgCOΓéée ΓÇö based on &quot;Do No Significant Harm&quot; threshold for small-scale ICT (100 gCOΓéée/kWh ├ù typical SME GPU compute).</p>
-              </div>
-              <div className="space-y-1">
-                <p className="font-semibold text-floral/70">CSRD Reporting</p>
-                <p>Pro and Enterprise tiers include ESRS E1-compliant emission reports (Scope 3 Category 11) compatible with the Corporate Sustainability Reporting Directive.</p>
-              </div>
-              <div className="space-y-1">
-                <p className="font-semibold text-floral/70">SBTi 1.5┬░C Pathway</p>
-                <p>Enterprise tier enforces Science Based Targets initiative absolute contraction: ΓêÆ4.2% annual reduction to align with Paris Agreement goals.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Manage subscription */}
-          <div className="flex flex-wrap gap-3">
-            {tier.basePriceCents > 0 && (
-              <button
-                onClick={openBillingPortal}
-                className="rounded-lg border border-crusoe/40 bg-crusoe/15 px-4 py-2 text-sm font-medium text-crusoe transition hover:bg-crusoe/25"
-              >
-                Manage subscription
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ΓöÇΓöÇ Organisation tab ΓöÇΓöÇ */}
+      {/* ── Organisation tab ── */}
       {activeTab === "org" && (
         <div className="space-y-6">
           {/* API Key section */}
@@ -416,7 +228,7 @@ export function SettingsPanel({
           {/* Budget form */}
           <form className="space-y-4" onSubmit={onSubmit}>
           <label className="block text-sm text-floral/75">
-            Organisation monthly budget (kgCOΓéée)
+            Organisation monthly budget (kgCO₂e)
             <input
               type="number"
               value={budgetKg}
@@ -424,8 +236,8 @@ export function SettingsPanel({
               className="mt-3 w-full rounded border-[0.5px] border-[#FFF8F0]/10 bg-[#23282E] px-4 py-3 font-mono text-sm font-light text-[#FFF8F0] outline-none transition-colors focus:border-stoneware-turquoise"
             />
             <span className="mt-1 block text-[11px] text-floral/40">
-              Plan limit: {tier.includedKg} kgCOΓéée/mo
-              {tier.hardCapKg > 0 && ` ┬╖ Hard cap: ${tier.hardCapKg} kg (EU Taxonomy DNSH)`}
+              Plan limit: {tier.includedKg} kgCO₂e/mo
+              {tier.hardCapKg > 0 && ` · Hard cap: ${tier.hardCapKg} kg (EU Taxonomy DNSH)`}
             </span>
           </label>
           <label className="block text-sm font-light text-[#FFF8F0]/60">
@@ -454,7 +266,7 @@ export function SettingsPanel({
         </div>
       )}
 
-      {/* ΓöÇΓöÇ Repositories tab ΓöÇΓöÇ */}
+      {/* ── Repositories tab ── */}
       {activeTab === "repos" && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -570,24 +382,6 @@ export function SettingsPanel({
         </div>
       )}
 
-      {/* ΓöÇΓöÇ Teams tab ΓöÇΓöÇ */}
-      {activeTab === "teams" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-light text-[#FFF8F0]/50">Assign budgets to teams. Members inherit the team policy.</p>
-            <button className="inline-flex items-center gap-2 rounded border-[0.5px] border-stoneware-green/30 bg-stoneware-green/10 px-4 py-2.5 text-[10px] uppercase tracking-widest text-stoneware-green transition-opacity hover:opacity-80">
-              <Plus size={12} />
-              Add team
-            </button>
-          </div>
-          <div className="rounded-xl border border-floral/[0.06] bg-floral/[0.02] py-10 text-center">
-            <p className="text-sm text-floral/40">No teams configured yet.</p>
-            <p className="mt-1 text-xs text-floral/30">
-              Coming soon: invite members by GitHub login and assign per-user overrides.
-            </p>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

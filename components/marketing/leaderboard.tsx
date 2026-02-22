@@ -67,10 +67,12 @@ export function Leaderboard({ topContributors }: { topContributors: LeaderboardE
                     )}
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="font-mono text-sm font-light text-[#FFF8F0]">{entry.gateCount} gates</p>
-                    {entry.savedKg > 0 && (
-                      <p className="mt-0.5 text-[11px] text-stoneware-green">{entry.savedKg.toFixed(1)} kg saved</p>
+                    {entry.savedKg > 0 ? (
+                      <p className="font-mono text-sm font-light text-stoneware-green">{entry.savedKg.toFixed(2)} kg saved</p>
+                    ) : (
+                      <p className="font-mono text-sm font-light text-[#FFF8F0]/30">0 kg saved</p>
                     )}
+                    <p className="mt-0.5 text-[11px] text-[#FFF8F0]/35">{entry.gateCount} gates</p>
                   </div>
                 </div>
               </CursorTilt>
