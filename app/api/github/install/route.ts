@@ -162,6 +162,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid repo — expected owner/name" }, { status: 400 });
   }
 
+  // 3b. Check push access before attempting to write files
+  const repoCheck = await fetch(`https://api.github.com/repos/${repo}`, {
+    headers: { Authorization: `Bearer ${ghToken}`, Accept: "application/vnd.github+json" },
+  });
+
+  if (!repoCheck.ok) {
+    return NextResponse.json(
+      {
+        error: `Cannot find repository "${repo}". Make sure it exists and you have access.`,
+      },
+      { status: 404 },
+    );
+  }
+
+  const repoData = (await repoCheck.json()) as { permissions?: { push?: boolean; admin?: boolean } };
+  if (!repoData.permissions?.push && !repoData.permissions?.admin) {
+    const [owner] = repo.split("/");
+    return NextResponse.json(
+      {
+        error: `You don't have write access to "${repo}". Ask the repo owner (@${owner}) to add you as a collaborator with write permissions, or ask them to install Carbon Gate from their own dashboard.`,
+        noPush: true,
+      },
+      { status: 403 },
+    );
+  }
+
   // 4. Get org API key for the user
   const { data: profile } = await supabaseAdmin
     .from("billing_profiles")
