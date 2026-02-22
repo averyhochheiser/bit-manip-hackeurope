@@ -23,6 +23,9 @@ inputs:
   crusoe-api-key:
     description: "Crusoe Cloud API key for AI-powered carbon-efficiency code suggestions."
     required: false
+  override-signing-secret:
+    description: "HMAC secret for generating signed pay-to-override checkout links (OVERRIDE_SIGNING_SECRET)."
+    required: false
 
 runs:
   using: "composite"
@@ -44,11 +47,12 @@ runs:
         API_ENDPOINT: ${{ inputs.api-endpoint }}
         ORG_API_KEY: ${{ inputs.org-api-key }}
         CRUSOE_API_KEY: ${{ inputs.crusoe-api-key }}
+        OVERRIDE_SIGNING_SECRET: ${{ inputs.override-signing-secret }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_SHA: ${{ github.sha }}
         GITHUB_REF: ${{ github.ref }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
-        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        PR_SHA: ${{ github.event.pull_request.head.sha }}
       run: |
         python ${{ github.action_path }}/gate_check.py
