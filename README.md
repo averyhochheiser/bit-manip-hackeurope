@@ -1,3 +1,4 @@
+:)
 # 🌍 Carbon Gate
 
 > A GitHub Action that intercepts ML training jobs in a pull request pipeline, estimates their carbon emissions using real-time grid data, and either warns the developer, blocks the run, or suggests rerouting to Crusoe's clean energy infrastructure.
